@@ -239,6 +239,11 @@ def connecter_utilisateur(result, nom="Utilisateur"):
             st.session_state.user = profil
             st.session_state.token = result["token"]
             st.session_state.connecte = True
+            try:
+                from modules.session_persistante import sauvegarder_session
+                sauvegarder_session(uid, email or "", result["token"])
+            except:
+                pass
             return True
     return False
 

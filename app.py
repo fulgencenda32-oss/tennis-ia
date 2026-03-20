@@ -200,6 +200,11 @@ label { color: rgba(255,255,255,0.8) !important; font-weight:500 !important; }
 # ============================================================
 from modules.auth import afficher_interface_connexion, afficher_barre_utilisateur, is_connecte, is_admin, afficher_panel_admin
 
+from modules.session_persistante import restaurer_session, effacer_session_locale
+
+# Tenter de restaurer la session depuis localStorage
+restaurer_session()
+
 # Afficher l'interface de connexion — si non connecté, on s'arrête ici
 if not afficher_interface_connexion():
     st.stop()
