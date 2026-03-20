@@ -1,9 +1,5 @@
 # ============================================================
-<<<<<<< HEAD
 # TENNIS IA – Application principale
-=======
-# TENNIS IA — Application principale
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 # ============================================================
 import streamlit as st
 import pandas as pd
@@ -25,11 +21,7 @@ st.set_page_config(
 )
 
 # ============================================================
-<<<<<<< HEAD
 # CSS PERSONNALISÉ – Vert gazon moderne
-=======
-# CSS PERSONNALISÉ — Vert gazon moderne
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 # ============================================================
 st.markdown("""
 <style>
@@ -109,10 +101,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     box-shadow: 0 6px 20px rgba(45,158,86,0.5);
 }
 
-<<<<<<< HEAD
-=======
-/* ── INPUTS — texte visible ── */
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 .stTextInput > div > div > input,
 .stNumberInput > div > div > input,
 .stTextArea > div > div > textarea,
@@ -133,10 +121,6 @@ input::placeholder, textarea::placeholder {
     color: rgba(255,255,255,0.35) !important;
 }
 
-<<<<<<< HEAD
-=======
-/* ── SELECTBOX ── */
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 .stSelectbox > div > div,
 [data-baseweb="select"] > div {
     background: rgba(15, 40, 30, 0.95) !important;
@@ -148,10 +132,6 @@ input::placeholder, textarea::placeholder {
     color: #ffffff !important;
 }
 
-<<<<<<< HEAD
-=======
-/* ── DROPDOWN OPTIONS ── */
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 [data-baseweb="popover"],
 [data-baseweb="menu"] {
     background: #0d2137 !important;
@@ -168,28 +148,16 @@ input::placeholder, textarea::placeholder {
     color: #4ade80 !important;
 }
 
-<<<<<<< HEAD
-=======
-/* ── DATE INPUT ── */
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 [data-testid="stDateInput"] input {
     background: rgba(15,40,30,0.95) !important;
     color: #ffffff !important;
     border: 1px solid rgba(45,158,86,0.5) !important;
 }
 
-<<<<<<< HEAD
-=======
-/* ── CHECKBOX ── */
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 [data-testid="stCheckbox"] label {
     color: #ffffff !important;
 }
 
-<<<<<<< HEAD
-=======
-/* ── ALERTS ── */
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 .stSuccess {
     background: rgba(45,158,86,0.15) !important;
     border: 1px solid rgba(45,158,86,0.4) !important;
@@ -228,7 +196,6 @@ label { color: rgba(255,255,255,0.8) !important; font-weight:500 !important; }
 """, unsafe_allow_html=True)
 
 # ============================================================
-<<<<<<< HEAD
 # AUTHENTIFICATION FIREBASE
 # ============================================================
 from modules.auth import afficher_interface_connexion, afficher_barre_utilisateur, is_connecte, is_admin, afficher_panel_admin
@@ -241,8 +208,6 @@ if not afficher_interface_connexion():
 afficher_barre_utilisateur()
 
 # ============================================================
-=======
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 # REDÉFINITION simplifier_round
 # ============================================================
 def simplifier_round(r):
@@ -265,7 +230,6 @@ def charger_modeles():
     chemin = os.path.join(
         os.path.dirname(__file__), 'data', 'modeles_tennis_v2.pkl'
     )
-<<<<<<< HEAD
     if not os.path.exists(chemin):
         try:
             from huggingface_hub import hf_hub_download
@@ -277,8 +241,6 @@ def charger_modeles():
         except Exception as e:
             st.error(f"❌ Impossible de télécharger les modèles : {e}")
             st.stop()
-=======
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
     with open(chemin, 'rb') as f:
         modeles = pickle.load(f)
     modeles['simplifier_round'] = simplifier_round
@@ -286,28 +248,15 @@ def charger_modeles():
 
 @st.cache_data
 def charger_base():
-<<<<<<< HEAD
-=======
-    # Essai local d'abord
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
     chemin = os.path.join(
         os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
     )
     if os.path.exists(chemin):
         return pd.read_csv(chemin, low_memory=False)
-<<<<<<< HEAD
     try:
         from huggingface_hub import hf_hub_download
         chemin_hf = hf_hub_download(
             repo_id   = 'fulgence10/tennis-data',
-=======
-
-    # Sinon télécharge depuis HuggingFace Dataset
-    try:
-        from huggingface_hub import hf_hub_download
-        chemin_hf = hf_hub_download(
-            repo_id   = 'Fulgence10/tennis-data',
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
             filename  = 'BASE_FEATURES.csv',
             repo_type = 'dataset'
         )
@@ -326,12 +275,7 @@ with st.spinner("⏳ Chargement de Tennis IA..."):
         CSV_DISPO = df_base is not None
     except Exception as e:
         st.error(f"❌ Erreur : {e}")
-<<<<<<< HEAD
         st.stop()
-=======
-        CHARGE  = False
-        CSV_DISPO = False
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 
 # ============================================================
 # HEADER PRINCIPAL
@@ -339,7 +283,6 @@ with st.spinner("⏳ Chargement de Tennis IA..."):
 st.markdown("""
 <div class="main-header">
     <h1>🎾 Tennis IA</h1>
-<<<<<<< HEAD
     <p>Intelligence Artificielle de Prédictions Tennis · ATP · WTA · Challengers · ITF · 830 000+ matchs</p>
 </div>
 """, unsafe_allow_html=True)
@@ -363,47 +306,6 @@ st.markdown("---")
 
 # ============================================================
 # ONGLETS NAVIGATION
-=======
-    <p>Intelligence Artificielle de Prédictions Tennis
-    · ATP · WTA · Challengers · ITF · 830 000+ matchs</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Stats rapides ──
-if CHARGE:
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric(
-            "👤 Joueurs",
-            f"{len(modeles.get('elo_final',{})):,}"
-        )
-    with col2:
-        st.metric(
-            "🏆 Vainqueur",
-            f"{modeles.get('acc_win',0)*100:.1f}%"
-        )
-    with col3:
-        st.metric(
-            "🔢 Nb Sets",
-            f"{modeles.get('acc_sets',0)*100:.1f}%"
-        )
-    with col4:
-        st.metric(
-            "⚖️ Handicap",
-            f"{modeles.get('acc_handi',0)*100:.1f}%"
-        )
-    with col5:
-        st.metric("📊 Matchs analysés", "830 906")
-
-    # Avertissement si CSV absent
-    if not CSV_DISPO:
-        st.warning("⚠️ BASE_FEATURES.csv non disponible — certaines fonctionnalités sont limitées.")
-
-    st.markdown("---")
-
-# ============================================================
-# ONGLETS NAVIGATION — 6 onglets
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 # ============================================================
 if CHARGE:
     from modules.prediction     import page_prediction
@@ -413,19 +315,14 @@ if CHARGE:
     from modules.performance    import page_performance
     from modules.matchs_du_jour import page_matchs_jour
 
-<<<<<<< HEAD
     # Onglets de base
     onglets = [
-=======
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
         "📅 Matchs du jour",
         "🎾 Prédiction",
         "👤 Joueurs",
         "🔄 Mise à jour",
         "📚 Historique",
         "📊 Performance IA"
-<<<<<<< HEAD
     ]
 
     # Ajouter onglet Admin si c'est Fulgence N'da
@@ -454,27 +351,3 @@ if CHARGE:
 
 else:
     st.error("❌ Impossible de charger l'application.")
-=======
-    ])
-
-    with tab1:
-        page_matchs_jour(modeles, df_base)
-    with tab2:
-        page_prediction(modeles, df_base)
-    with tab3:
-        page_joueurs(modeles, df_base)
-    with tab4:
-        page_mise_a_jour(modeles, df_base)
-    with tab5:
-        page_historique()
-    with tab6:
-        page_performance()
-
-else:
-    st.error("❌ Impossible de charger les modèles.")
-    st.info(
-        "Vérifie que ces fichiers sont dans le dossier data/ :"
-        "\n- modeles_tennis_v2.pkl"
-        "\n- BASE_FEATURES.csv"
-    )
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
