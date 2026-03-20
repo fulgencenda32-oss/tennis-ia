@@ -411,33 +411,23 @@ def page_prediction(modeles, df_base):
             incrementer_compteur_predictions()
             st.success("✅ Prédiction calculée !")
 
-            # ── Bouton Copier ──
+            # ── Zone Copier ──
             texte_copie = (
-                f"🎾 TENNIS IA — Prédiction\n"
+                f"🎾 TENNIS IA - Prediction\n"
                 f"Match : {joueur_a} vs {joueur_b}\n"
                 f"Surface : {surface} | Tournoi : {tournoi}\n"
-                f"─────────────────────\n"
-                f"🏆 Vainqueur : {res['vainqueur']} ({res['proba_v']}%)\n"
-                f"🎯 Score exact : {res['score_exact']}\n"
-                f"🔢 Nombre de sets : {res['nb_sets']}\n"
-                f"⚖️ Handicap : {res['handicap']} set(s)\n"
-                f"─────────────────────\n"
-                f"📊 ELO : {joueur_a} {res['elo_a']} | {joueur_b} {res['elo_b']}\n"
-                f"💪 Forme : {joueur_a} {res['forme_a']}% | {joueur_b} {res['forme_b']}%\n"
-                f"🤝 H2H : {joueur_a} {res['h2h_a']} | {joueur_b} {res['h2h_b']}"
+                f"---------------------\n"
+                f"Vainqueur : {res['vainqueur']} ({res['proba_v']}%)\n"
+                f"Score exact : {res['score_exact']}\n"
+                f"Nombre de sets : {res['nb_sets']}\n"
+                f"Handicap : {res['handicap']} set(s)\n"
+                f"---------------------\n"
+                f"ELO : {joueur_a} {res['elo_a']} | {joueur_b} {res['elo_b']}\n"
+                f"Forme : {joueur_a} {res['forme_a']}% | {joueur_b} {res['forme_b']}%\n"
+                f"H2H : {joueur_a} {res['h2h_a']} | {joueur_b} {res['h2h_b']}"
             )
-            import streamlit.components.v1 as components
-            components.html(f"""
-            <button onclick="navigator.clipboard.writeText(`{texte_copie}`).then(()=>{{
-                this.innerText='✅ Copié !';
-                setTimeout(()=>this.innerText='📋 Copier la prédiction',2000);
-            }})" style="
-                background:linear-gradient(135deg,#1a6b3a,#2d9e56);
-                color:white; border:none; border-radius:10px;
-                padding:10px 20px; font-size:14px; font-weight:600;
-                cursor:pointer; margin:8px 0;
-            ">📋 Copier la prédiction</button>
-            """, height=50)
+            st.markdown("**📋 Copier la prédiction :**")
+            st.code(texte_copie, language=None)
 
             st.markdown("---")
 
