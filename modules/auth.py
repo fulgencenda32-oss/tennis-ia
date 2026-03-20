@@ -1,4 +1,4 @@
-﻿"""
+"""
 auth.py — Module d'authentification Firebase pour Tennis IA
 Auteur : Fulgence N'da
 Date : 20 mars 2026
@@ -29,9 +29,9 @@ ADMIN_NAME = "Fulgence N'da"
 
 # Mode payant : False = tout le monde accède librement
 # Pour activer le payant, mettre True
-MODE_PAYANT = False
+MODE_PAYANT = True
 
-# Limites en mode gratuit (ignorées si MODE_PAYANT = False)
+# Limites en mode gratuit (ignorées si MODE_PAYANT = True)
 LIMITE_PREDICTIONS_GRATUITES = 2  # par jour
 
 # Firebase Web API Key (à mettre dans .env)
@@ -234,6 +234,8 @@ def connecter_utilisateur(result, nom="Utilisateur"):
         email = result.get("email", "")
         profil = charger_profil_utilisateur(uid, email or "anonyme@tennis-ia.app")
         if profil:
+            if not profil.get("actif", True) and email != ADMIN_EMAIL:
+                return "bloque"
             st.session_state.user = profil
             st.session_state.token = result["token"]
             st.session_state.connecte = True
@@ -405,9 +407,12 @@ def afficher_interface_connexion():
                     else:
                         with st.spinner("Connexion en cours..."):
                             result = connexion_email(email, mdp)
-                            if connecter_utilisateur(result):
+                            statut = connecter_utilisateur(result)
+                            if statut == True:
                                 st.success(f"Bienvenue {st.session_state.user.get('nom', '')} ! 🎾")
                                 st.rerun()
+                            elif statut == "bloque":
+                                st.error("🚫 Votre compte a été suspendu. Contactez l'administrateur.")
                             else:
                                 st.error(result.get("erreur", "Erreur de connexion."))
 
@@ -502,5 +507,49 @@ def afficher_barre_utilisateur():
 
         st.markdown("---")
 
+
+
+
+
+# ==============================
+# 🔑 MOT DE PASSE OUBLIÉ
+# ==============================
+
+def afficher_reset_password():
+    import streamlit as st
+    import requests
+
+    st.markdown("## 🔑 Récupération d'accès")
+
+    choix = st.radio(
+        "Choisissez une méthode :",
+        ["📧 Email", "📱 Téléphone (OTP)"]
+    )
+
+    if choix == "📧 Email":
+        email = st.text_input("Entrez votre email")
+
+        if st.button("Envoyer le lien de réinitialisation"):
+            if not email:
+                st.error("Veuillez entrer un email valide")
+            else:
+                try:
+                    url = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
+                    payload = {
+                        "requestType": "PASSWORD_RESET",
+                        "email": email
+                    }
+
+                    response = requests.post(url, json=payload)
+
+                    if response.status_code == 200:
+                        st.success("📧 Email de réinitialisation envoyé")
+                    else:
+                        st.error("❌ Erreur lors de l'envoi")
+                except Exception as e:
+                    st.error(f"Erreur : {e}")
+
+    else:
+        st.info("📱 Connectez-vous via OTP depuis l'écran principal")
 
 
