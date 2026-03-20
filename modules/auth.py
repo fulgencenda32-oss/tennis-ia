@@ -387,7 +387,7 @@ def afficher_interface_connexion():
     tab1, tab2, tab3, tab4 = st.tabs(["📧 Email", "📱 Téléphone", "👤 Anonyme", "ℹ️ À propos"])
 
     with tab1:
-        mode = st.radio("", ["Se connecter", "Créer un compte"], horizontal=True)
+        mode = st.radio("Mode", ["Se connecter", "Créer un compte"], horizontal=True, label_visibility="collapsed")
 
         if mode == "Se connecter":
             with st.form("form_connexion"):
@@ -497,4 +497,5 @@ def afficher_barre_utilisateur():
             deconnexion()
 
         st.markdown("---")
+
 
