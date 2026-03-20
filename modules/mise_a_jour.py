@@ -126,7 +126,7 @@ def convertir_matchs(matchs_raw):
 
             continue
 
-        sets = re.findall(r'(\d+)-(\d+)', score_raw)
+        sets = re.findall(r'(\d+)\s*-\s*(\d+)', score_raw)
 
         if not sets:
 
