@@ -391,6 +391,11 @@ def page_prediction(modeles, df_base):
         elif joueur_a == joueur_b:
             st.error("❌ Les deux joueurs doivent être différents !")
         else:
+            from modules.auth import peut_faire_prediction, incrementer_compteur_predictions
+            peut, message = peut_faire_prediction()
+            if not peut:
+                st.error(f"🔒 {message}")
+                st.stop()
             with st.spinner("⏳ Calcul en cours..."):
                 res = predire_match(
                     joueur_a, joueur_b,
@@ -403,6 +408,7 @@ def page_prediction(modeles, df_base):
                     cote_b = cote_b if utiliser_cotes else None,
                 )
 
+            incrementer_compteur_predictions()
             st.success("✅ Prédiction calculée !")
             st.markdown("---")
 
