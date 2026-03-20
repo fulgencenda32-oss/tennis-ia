@@ -566,8 +566,9 @@ def page_mise_a_jour(modeles, df_base):
 
 
         with st.spinner("🚀 Upload sur HuggingFace..."):
-
-            succes = upload_huggingface(modeles_maj, None)
+            # Retirer les fonctions non-serializables avant pickle
+            modeles_upload = {k: v for k, v in modeles_maj.items() if not callable(v)}
+            succes = upload_huggingface(modeles_upload, None)
 
 
 
