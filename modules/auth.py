@@ -1,4 +1,4 @@
-"""
+﻿"""
 auth.py — Module d'authentification Firebase pour Tennis IA
 Auteur : Fulgence N'da
 Date : 20 mars 2026
@@ -384,7 +384,7 @@ def afficher_interface_connexion():
     """, unsafe_allow_html=True)
 
     # Onglets de connexion
-    tab1, tab2, tab3 = st.tabs(["📧 Email", "👤 Anonyme", "ℹ️ À propos"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📧 Email", "📱 Téléphone", "👤 Anonyme", "ℹ️ À propos"])
 
     with tab1:
         mode = st.radio("", ["Se connecter", "Créer un compte"], horizontal=True)
@@ -432,6 +432,10 @@ def afficher_interface_connexion():
                                 st.error(result.get("erreur", "Erreur lors de la création."))
 
     with tab2:
+        st.info("📱 La connexion par téléphone (OTP SMS) est disponible dans l'APK Android. Sur le web, utilisez l'onglet Email.")
+        st.markdown("**Étapes dans l'APK :**\n1. Entrez votre numéro (+225XXXXXXXX)\n2. Recevez un SMS\n3. Entrez le code reçu")
+
+    with tab3:
         st.markdown("""
             <div style='text-align:center; padding:1rem;'>
                 <p>Accédez à l'app sans créer de compte.<br>
@@ -447,7 +451,7 @@ def afficher_interface_connexion():
                 else:
                     st.error("Impossible de se connecter anonymement.")
 
-    with tab3:
+    with tab4:
         st.markdown("""
             **Tennis IA** est une application de prédictions tennis basée sur l'intelligence artificielle.
 
@@ -493,3 +497,4 @@ def afficher_barre_utilisateur():
             deconnexion()
 
         st.markdown("---")
+
