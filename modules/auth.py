@@ -50,8 +50,12 @@ def init_firebase():
             if os.path.exists(cred_path):
                 cred = credentials.Certificate(cred_path)
                 firebase_admin.initialize_app(cred)
+            elif os.getenv('FIREBASE_KEY'):
+                import json
+                cle_json = json.loads(os.getenv('FIREBASE_KEY'))
+                cred = credentials.Certificate(cle_json)
+                firebase_admin.initialize_app(cred)
             else:
-                # Initialisation sans credentials (lecture seule)
                 firebase_admin.initialize_app()
         except Exception as e:
             st.error(f"Erreur Firebase : {e}")
@@ -497,5 +501,6 @@ def afficher_barre_utilisateur():
             deconnexion()
 
         st.markdown("---")
+
 
 
