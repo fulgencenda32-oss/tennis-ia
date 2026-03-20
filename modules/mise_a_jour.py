@@ -302,7 +302,7 @@ def upload_huggingface(modeles, chemin_pkl):
 
             path_in_repo='data/modeles_tennis_v2.pkl',
 
-            repo_id='Fulgence10/Tennis-IA',
+            repo_id='fulgence10/tennis-ia',
 
             repo_type='space',
 
