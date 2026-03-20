@@ -1,5 +1,5 @@
 # ============================================================
-# MODULE MISE Ã€ JOUR
+# MODULE MISE À JOUR
 # ============================================================
 import streamlit as st
 import pandas as pd
@@ -18,7 +18,7 @@ API_KEY  = os.getenv("ALLSPORTS_API_KEY")
 BASE_URL = "https://apiv2.allsportsapi.com/tennis/"
 
 # ============================================================
-# RÃ‰CUPÃ‰RATION MATCHS VIA API
+# RÉCUPÉRATION MATCHS VIA API
 # ============================================================
 def get_matchs_api(date_debut, date_fin):
     try:
@@ -33,7 +33,7 @@ def get_matchs_api(date_debut, date_fin):
             if data.get("success") == 1:
                 return data.get("result", [])
     except Exception as e:
-        st.error(f"âŒ Erreur API : {e}")
+        st.error(f"? Erreur API : {e}")
     return []
 
 # ============================================================
@@ -80,7 +80,7 @@ def convertir_matchs(matchs_raw):
     return nouveaux
 
 # ============================================================
-# MISE Ã€ JOUR INCRÃ‰MENTALE ELO + FORME
+# MISE À JOUR INCRÉMENTALE ELO + FORME
 # ============================================================
 def mise_a_jour_incrementale(modeles, nouveaux_matchs):
     elo_g = defaultdict(lambda: 1500.0, modeles['elo_final'])
@@ -95,17 +95,17 @@ def mise_a_jour_incrementale(modeles, nouveaux_matchs):
         l    = str(m['loser_name'])
         surf = str(m.get('surface', 'Hard'))
 
-        # Mise Ã  jour ELO gÃ©nÃ©ral
+        # Mise à jour ELO général
         ea = 1 / (1 + 10**((elo_g[l] - elo_g[w]) / 400))
         elo_g[w] += 32 * (1 - ea)
         elo_g[l] += 32 * (0 - (1 - ea))
 
-        # Mise Ã  jour ELO surface
+        # Mise à jour ELO surface
         ea_s = 1 / (1 + 10**((elo_s[surf][l] - elo_s[surf][w]) / 400))
         elo_s[surf][w] += 32 * (1 - ea_s)
         elo_s[surf][l] += 32 * (0 - (1 - ea_s))
 
-        # Mise Ã  jour forme
+        # Mise à jour forme
         fw = forme.get(w, 0.5)
         fl = forme.get(l, 0.5)
         forme[w] = fw * 0.9 + 0.1 * 1.0
@@ -128,7 +128,7 @@ def upload_huggingface(modeles, chemin_pkl):
         import tempfile
         from huggingface_hub import HfApi
 
-        # Sauvegarder le modÃ¨le temporairement
+        # Sauvegarder le modèle temporairement
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as f:
             pickle.dump(modeles, f)
             chemin_tmp = f.name
@@ -139,31 +139,31 @@ def upload_huggingface(modeles, chemin_pkl):
             path_in_repo='data/modeles_tennis_v2.pkl',
             repo_id='Fulgence10/Tennis-IA',
             repo_type='space',
-            commit_message=f'Mise Ã  jour incrÃ©mentale {datetime.now().strftime("%Y-%m-%d %H:%M")}'
+            commit_message=f'Mise à jour incrémentale {datetime.now().strftime("%Y-%m-%d %H:%M")}'
         )
         os.unlink(chemin_tmp)
         return True
     except Exception as e:
-        st.error(f"âŒ Erreur upload : {e}")
+        st.error(f"? Erreur upload : {e}")
         return False
 
 # ============================================================
-# PAGE MISE Ã€ JOUR
+# PAGE MISE À JOUR
 # ============================================================
 def page_mise_a_jour(modeles, df_base):
-    st.title("ğŸ”„ Mise Ã  jour")
+    st.title("?? Mise à jour")
     st.markdown("---")
 
-    # â”€â”€ Statut connexion â”€â”€
-    st.subheader("ğŸ“¡ Statut de la connexion API")
+    # -- Statut connexion --
+    st.subheader("?? Statut de la connexion API")
     col1, col2 = st.columns(2)
     with col1:
         if API_KEY:
-            st.success(f"âœ… ClÃ© API trouvÃ©e : {API_KEY[:10]}...")
+            st.success(f"? Clé API trouvée : {API_KEY[:10]}...")
         else:
-            st.error("âŒ ClÃ© API manquante")
+            st.error("? Clé API manquante")
     with col2:
-        if st.button("ğŸ” Tester la connexion API"):
+        if st.button("?? Tester la connexion API"):
             try:
                 r = requests.get(BASE_URL, params={
                     "met"    : "Fixtures",
@@ -175,120 +175,154 @@ def page_mise_a_jour(modeles, df_base):
                     data = r.json()
                     if data.get("success") == 1:
                         nb = len(data.get("result", []))
-                        st.success(f"âœ… Connexion OK â€” {nb} matchs trouvÃ©s aujourd'hui")
+                        st.success(f"? Connexion OK — {nb} matchs trouvés aujourd'hui")
                     else:
-                        st.error(f"âŒ Erreur API : {data.get('error', 'Inconnue')}")
+                        st.error(f"? Erreur API : {data.get('error', 'Inconnue')}")
                 else:
-                    st.error(f"âŒ Erreur HTTP : {r.status_code}")
+                    st.error(f"? Erreur HTTP : {r.status_code}")
             except Exception as e:
-                st.error(f"âŒ Erreur : {e}")
+                st.error(f"? Erreur : {e}")
 
     st.markdown("---")
 
-    # â”€â”€ Statut modÃ¨les â”€â”€
-    st.subheader("ğŸ¤– Statut des modÃ¨les IA")
+    # -- Statut modèles --
+    st.subheader("?? Statut des modèles IA")
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
-        st.metric("ğŸ† Vainqueur", f"{modeles.get('acc_win', 0)*100:.1f}%")
+        st.metric("?? Vainqueur", f"{modeles.get('acc_win', 0)*100:.1f}%")
     with col_m2:
-        st.metric("ğŸ”¢ Nb Sets", f"{modeles.get('acc_sets', 0)*100:.1f}%")
+        st.metric("?? Nb Sets", f"{modeles.get('acc_sets', 0)*100:.1f}%")
     with col_m3:
-        st.metric("âš–ï¸ Handicap", f"{modeles.get('acc_handi', 0)*100:.1f}%")
+        st.metric("?? Handicap", f"{modeles.get('acc_handi', 0)*100:.1f}%")
     with col_m4:
         date_entr = modeles.get('date_entrainement', 'N/A')
-        st.metric("ğŸ“… Dernier entraÃ®nement", date_entr[:10] if date_entr != 'N/A' else 'N/A')
+        st.metric("?? Dernier entraînement", date_entr[:10] if date_entr != 'N/A' else 'N/A')
 
     st.markdown("---")
 
-    # â”€â”€ Statut base â”€â”€
-    st.subheader("ğŸ“Š Statut de la base de donnÃ©es")
+    # -- Statut base --
+    st.subheader("?? Statut de la base de données")
     col_b1, col_b2, col_b3 = st.columns(3)
     with col_b1:
         nb_joueurs = len(modeles.get('elo_final', {}))
-        st.metric("ğŸ‘¤ Joueurs en base", f"{nb_joueurs:,}")
+        st.metric("?? Joueurs en base", f"{nb_joueurs:,}")
     with col_b2:
         if df_base is not None:
-            st.metric("ğŸ¾ Matchs en base", f"{len(df_base):,}")
+            st.metric("?? Matchs en base", f"{len(df_base):,}")
         else:
-            st.metric("ğŸ¾ Matchs en base", "Non disponible")
+            st.metric("?? Matchs en base", "Non disponible")
     with col_b3:
-        st.metric("ğŸ“… PÃ©riode", "2010 â€” 2026")
+        st.metric("?? Période", "2010 — 2026")
 
     st.markdown("---")
 
-    # â”€â”€ Mise Ã  jour incrÃ©mentale â”€â”€
-    st.subheader("âš¡ Mise Ã  jour incrÃ©mentale via API")
+    # -- Mise à jour incrémentale --
+    st.subheader("? Mise à jour incrémentale via API")
     st.info(
-        "RÃ©cupÃ¨re les nouveaux matchs depuis une date choisie, "
-        "met Ã  jour ELO et forme, et uploade le modÃ¨le sur HuggingFace."
+        "Récupère les nouveaux matchs depuis une date choisie, "
+        "met à jour ELO et forme, et uploade le modèle sur HuggingFace."
     )
 
     col_d1, col_d2 = st.columns(2)
     with col_d1:
         date_debut = st.date_input(
-            "ğŸ“… Date de dÃ©but",
+            "?? Date de début",
             value=datetime.now().date() - timedelta(days=7),
-            help="RÃ©cupÃ¨re tous les matchs terminÃ©s depuis cette date"
+            help="Récupère tous les matchs terminés depuis cette date"
         )
     with col_d2:
         date_fin = st.date_input(
-            "ğŸ“… Date de fin",
+            "?? Date de fin",
             value=datetime.now().date(),
         )
 
-    if st.button("ğŸš€ Lancer la mise Ã  jour incrÃ©mentale", type="primary"):
+    if st.button("?? Lancer la mise à jour incrémentale", type="primary"):
         if not API_KEY:
-            st.error("âŒ ClÃ© API manquante !")
+            st.error("? Clé API manquante !")
             return
 
-        with st.spinner("ğŸ“¡ RÃ©cupÃ©ration des matchs via API..."):
+        with st.spinner("?? Récupération des matchs via API..."):
             matchs_raw = get_matchs_api(
                 str(date_debut), str(date_fin)
             )
 
-        st.info(f"ğŸ“Š {len(matchs_raw)} matchs rÃ©cupÃ©rÃ©s")
+        st.info(f"?? {len(matchs_raw)} matchs récupérés")
 
-        with st.spinner("ğŸ”„ Conversion des matchs..."):
+        with st.spinner("?? Conversion des matchs..."):
             nouveaux_matchs = convertir_matchs(matchs_raw)
 
         if not nouveaux_matchs:
-            st.warning("âš ï¸ Aucun match terminÃ© trouvÃ© sur cette pÃ©riode.")
+            st.warning("?? Aucun match terminé trouvé sur cette période.")
             return
 
-        st.success(f"âœ… {len(nouveaux_matchs)} matchs terminÃ©s trouvÃ©s !")
+        st.success(f"? {len(nouveaux_matchs)} matchs terminés trouvés !")
 
-        # AperÃ§u des matchs
+        # Aperçu des matchs
         df_apercu = pd.DataFrame(nouveaux_matchs)[
             ['tourney_date', 'winner_name', 'loser_name', 'score', 'circuit']
         ]
         st.dataframe(df_apercu.head(10), hide_index=True, use_container_width=True)
 
-        with st.spinner("âš¡ Mise Ã  jour ELO et forme..."):
+        with st.spinner("? Mise à jour ELO et forme..."):
             modeles_maj = mise_a_jour_incrementale(modeles, nouveaux_matchs)
+            st.session_state['modeles'] = modeles_maj
 
-        st.success("âœ… ELO et forme mis Ã  jour !")
+        st.success("? ELO et forme mis à jour !")
 
-        with st.spinner("ğŸš€ Upload sur HuggingFace..."):
+        with st.spinner("?? Upload sur HuggingFace..."):
             succes = upload_huggingface(modeles_maj, None)
 
         if succes:
-            st.success("âœ… ModÃ¨le uploadÃ© sur HuggingFace ! L'app sera mise Ã  jour dans 2-3 minutes.")
+            st.success("? Modèle uploadé sur HuggingFace ! L'app sera mise à jour dans 2-3 minutes.")
             st.balloons()
         else:
-            st.warning("âš ï¸ Upload Ã©chouÃ© â€” les mises Ã  jour sont actives pour cette session uniquement.")
+            st.warning("?? Upload échoué — les mises à jour sont actives pour cette session uniquement.")
 
     st.markdown("---")
 
-    # â”€â”€ Instructions rÃ©entraÃ®nement complet â”€â”€
-    st.subheader("ğŸ–¥ï¸ RÃ©entraÃ®nement complet hebdomadaire")
+    # -- Mise à jour via fichiers CSV --
+    st.subheader("?? Mise à jour via fichiers CSV")
+    st.info("Importez un ou plusieurs fichiers CSV pour mettre à jour les modèles sans passer par l'API.")
+    fichiers_csv = st.file_uploader("?? Importer des fichiers CSV", type=['csv'], accept_multiple_files=True, key="upload_csv_maj")
+    if fichiers_csv:
+        tous_matchs = []
+        for fichier in fichiers_csv:
+            try:
+                df_csv = pd.read_csv(fichier)
+                st.success(f"? {fichier.name} — {len(df_csv)} matchs chargés")
+                tous_matchs.append(df_csv)
+            except Exception as e:
+                st.error(f"? Erreur lecture {fichier.name} : {e}")
+        if tous_matchs:
+            df_total = pd.concat(tous_matchs, ignore_index=True)
+            st.info(f"?? Total : {len(df_total)} matchs à intégrer")
+            st.dataframe(df_total.head(5), hide_index=True, use_container_width=True)
+            if st.button("? Mettre à jour les modèles avec ces CSV", type="primary"):
+                matchs_csv = df_total.to_dict('records')
+                with st.spinner("? Mise à jour ELO et forme..."):
+                    modeles_maj = mise_a_jour_incrementale(modeles, matchs_csv)
+                    st.session_state['modeles'] = modeles_maj
+                st.success("? ELO et forme mis à jour !")
+                with st.spinner("?? Upload sur HuggingFace..."):
+                    succes = upload_huggingface(modeles_maj, None)
+                if succes:
+                    st.success("? Modèle uploadé sur HuggingFace !")
+                    st.balloons()
+                else:
+                    st.warning("?? Upload échoué — mises à jour actives pour cette session.")
+    st.markdown("---")
+
+    # -- Instructions réentraînement complet --
+    st.subheader("??? Réentraînement complet hebdomadaire")
     st.info(
-        "Pour le rÃ©entraÃ®nement complet, lancez le script sur votre PC une fois par semaine :"
+        "Pour le réentraînement complet, lancez le script sur votre PC une fois par semaine :"
     )
     st.code("python entrainement_hebdo.py", language="bash")
     st.markdown("""
     Ce script va :
-    - RÃ©cupÃ©rer les nouveaux matchs via API
-    - Les ajouter Ã  la base complÃ¨te
-    - RÃ©entraÃ®ner les 3 modÃ¨les sur toute la base
+    - Récupérer les nouveaux matchs via API
+    - Les ajouter à la base complète
+    - Réentraîner les 3 modèles sur toute la base
     - Uploader automatiquement sur HuggingFace
     """)
+
