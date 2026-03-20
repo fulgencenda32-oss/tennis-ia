@@ -236,7 +236,6 @@ def page_joueurs(modeles, df_base):
                 f"{j} (similarité {s:.0f}%)"
                 for j, s in suggestions
             ]
-<<<<<<< HEAD
             # Ajout option "Aucun de ces joueurs"
             options_avec_autre = options + ["❌ Aucun de ces joueurs — rechercher via API"]
             choix      = st.selectbox(
@@ -276,11 +275,6 @@ def page_joueurs(modeles, df_base):
                         st.dataframe(df_up.head(5))
                 st.stop()
 
-=======
-            choix      = st.selectbox(
-                "Sélectionne un joueur", options
-            )
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
             joueur_sel = suggestions[options.index(choix)][0]
 
             with st.spinner("⏳ Chargement du profil..."):
