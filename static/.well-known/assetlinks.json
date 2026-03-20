@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.fulgencenda32_oss.twa",
+    "sha256_cert_fingerprints": [
+      "31:A2:03:28:DA:56:FE:D3:6A:2A:9D:35:3B:CD:3A:48:C3:D0:48:0E:02:82:27:6F:54:6B:1F:65:EF:BB:C2:0E"
+    ]
+  }
+}]
