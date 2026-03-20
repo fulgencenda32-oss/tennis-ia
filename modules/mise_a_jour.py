@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # MODULE MISE À JOUR
 # ============================================================
 import streamlit as st
@@ -16,18 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY  = os.getenv("ALLSPORTS_API_KEY")
 BASE_URL = "https://apiv2.allsportsapi.com/tennis/"
-
-# Défini au niveau module pour compatibilité pickle
-def simplifier_round(r):
-    r = str(r).upper()
-    if "QUARTER" in r or "QF" in r: return 4
-    if "SEMI" in r or "SF" in r: return 5
-    if r in ["F","FINAL","THE FINAL"]: return 6
-    if "R128" in r: return 1
-    if "R64" in r: return 2
-    if "R32" in r: return 3
-    if "R16" in r: return 3
-    return 3
 
 # ============================================================
 # RÉCUPÉRATION MATCHS VIA API
@@ -145,8 +133,7 @@ def upload_huggingface(modeles, chemin_pkl):
             pickle.dump(modeles, f)
             chemin_tmp = f.name
 
-        hf_token = os.getenv('HF_TOKEN') or os.getenv('Tennis_IA_Write')
-        api = HfApi(token=hf_token)
+        api = HfApi()
         api.upload_file(
             path_or_fileobj=chemin_tmp,
             path_in_repo='data/modeles_tennis_v2.pkl',
@@ -305,4 +292,3 @@ def page_mise_a_jour(modeles, df_base):
     - Réentraîner les 3 modèles sur toute la base
     - Uploader automatiquement sur HuggingFace
     """)
-
