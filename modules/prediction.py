@@ -172,7 +172,6 @@ def predire_match(
     cle      = (nb_sets_p, handicap_p)
     cle_surf = (nb_sets_p, handicap_p, surface)
     if cle_surf in dico_scores_surf:
-<<<<<<< HEAD
         scores_surf = dico_scores_surf[cle_surf]
         if isinstance(scores_surf, list) and len(scores_surf) > 0:
             score_exact = np.random.choice(scores_surf)
@@ -191,13 +190,6 @@ def predire_match(
             score_exact = np.random.choice(scores_defaut_2)
         else:
             score_exact = np.random.choice(scores_defaut_3)
-=======
-        score_exact = dico_scores_surf[cle_surf]
-    elif cle in dico_scores:
-        score_exact = dico_scores[cle][0]
-    else:
-        score_exact = '6-4 6-3' if nb_sets_p == 2 else '6-4 4-6 6-3'
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 
     vainqueur = joueur_a if proba_a >= 0.5 else joueur_b
     proba_v   = proba_a  if proba_a >= 0.5 else 1 - proba_a
