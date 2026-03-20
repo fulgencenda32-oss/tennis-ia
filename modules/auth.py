@@ -1,4 +1,4 @@
-﻿"""
+"""
 auth.py — Module d'authentification Firebase pour Tennis IA
 Auteur : Fulgence N'da
 Date : 20 mars 2026
@@ -370,8 +370,7 @@ def afficher_interface_connexion():
     if is_connecte():
         return True
 
-    st.markdown("""<style>html,body,[class*=""css""]{font-size:17px!important;}.stTextInput input,.stButton button{font-size:16px!important;}</style>""", unsafe_allow_html=True)
-    # En-tete
+    # En-tête
     st.markdown("""
         <div style='text-align:center; padding: 2rem 0 1rem 0;'>
             <h1 style='font-size:3rem; background: linear-gradient(135deg, #00c853, #00e676);
@@ -385,7 +384,7 @@ def afficher_interface_connexion():
     """, unsafe_allow_html=True)
 
     # Onglets de connexion
-    tab1, tab2, tab3, tab4 = st.tabs(["📧 Email", "📱 Téléphone", "👤 Anonyme", "ℹ️ À propos"])
+    tab1, tab2, tab3 = st.tabs(["📧 Email", "👤 Anonyme", "ℹ️ À propos"])
 
     with tab1:
         mode = st.radio("", ["Se connecter", "Créer un compte"], horizontal=True)
@@ -494,6 +493,3 @@ def afficher_barre_utilisateur():
             deconnexion()
 
         st.markdown("---")
-
-
-
