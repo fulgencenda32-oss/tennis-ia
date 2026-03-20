@@ -17,18 +17,6 @@ load_dotenv()
 API_KEY  = os.getenv("ALLSPORTS_API_KEY")
 BASE_URL = "https://apiv2.allsportsapi.com/tennis/"
 
-# Défini au niveau module pour compatibilité pickle
-def simplifier_round(r):
-    r = str(r).upper()
-    if "QUARTER" in r or "QF" in r: return 4
-    if "SEMI"    in r or "SF" in r: return 5
-    if r in ["F","FINAL","THE FINAL"]: return 6
-    if "R128" in r: return 1
-    if "R64"  in r: return 2
-    if "R32"  in r: return 3
-    if "R16"  in r: return 3
-    return 3
-
 # ============================================================
 # RÉCUPÉRATION MATCHS VIA API
 # ============================================================
@@ -55,14 +43,14 @@ def convertir_matchs(matchs_raw):
     nouveaux = []
     for m in matchs_raw:
         statut = str(m.get('event_status', '')).lower()
-        if statut.lower() not in ['finished', 'fin', 'ft', 'retired']:
+        if statut not in ['finished', 'fin', 'ft']:
             continue
         score_raw = str(m.get('event_final_result', '') or '')
         joueur_a  = str(m.get('event_first_player',  '') or '')
         joueur_b  = str(m.get('event_second_player', '') or '')
         if not joueur_a or not joueur_b or not score_raw:
             continue
-        sets = re.findall(r'(\d+)\s*-\s*(\d+)', score_raw)
+        sets = re.findall(r'(\d+)-(\d+)', score_raw)
         if not sets:
             continue
         sets_a = sum(1 for a, b in sets if int(a) > int(b))
@@ -140,16 +128,12 @@ def upload_huggingface(modeles, chemin_pkl):
         import tempfile
         from huggingface_hub import HfApi
 
-        # Utiliser simplifier_round défini au niveau module
-        modeles["simplifier_round"] = simplifier_round
-
         # Sauvegarder le modèle temporairement
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as f:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as f:
             pickle.dump(modeles, f)
             chemin_tmp = f.name
 
-        hf_token = os.getenv('HF_TOKEN') or os.getenv('Tennis_IA_Write')
-        api = HfApi(token=hf_token)
+        api = HfApi()
         api.upload_file(
             path_or_fileobj=chemin_tmp,
             path_in_repo='data/modeles_tennis_v2.pkl',
@@ -295,59 +279,6 @@ def page_mise_a_jour(modeles, df_base):
 
     st.markdown("---")
 
-<<<<<<< HEAD
-    # ── Mise à jour via fichiers CSV ──
-    st.subheader("📁 Mise à jour via fichiers CSV")
-    st.info(
-        "Importez un ou plusieurs fichiers CSV contenant des matchs "
-        "pour mettre à jour les modèles sans passer par l'API."
-    )
-
-    st.markdown("**Format CSV attendu :**")
-    st.code(
-        "winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank, circuit, genre, best_of",
-        language="text"
-    )
-
-    fichiers_csv = st.file_uploader(
-        "📂 Importer des fichiers CSV",
-        type=['csv'],
-        accept_multiple_files=True,
-        key="upload_csv_maj"
-    )
-
-    if fichiers_csv:
-        tous_matchs = []
-        for fichier in fichiers_csv:
-            try:
-                df_csv = pd.read_csv(fichier)
-                st.success(f"✅ {fichier.name} — {len(df_csv)} matchs chargés")
-                tous_matchs.append(df_csv)
-            except Exception as e:
-                st.error(f"❌ Erreur lecture {fichier.name} : {e}")
-
-        if tous_matchs:
-            df_total = pd.concat(tous_matchs, ignore_index=True)
-            st.info(f"📊 Total : {len(df_total)} matchs à intégrer")
-            st.dataframe(df_total.head(5), hide_index=True, use_container_width=True)
-
-            if st.button("⚡ Mettre à jour les modèles avec ces CSV", type="primary"):
-                matchs_csv = df_total.to_dict('records')
-                with st.spinner("⚡ Mise à jour ELO et forme..."):
-                    modeles_maj = mise_a_jour_incrementale(modeles, matchs_csv)
-                st.success("✅ ELO et forme mis à jour !")
-                with st.spinner("🚀 Upload sur HuggingFace..."):
-                    succes = upload_huggingface(modeles_maj, None)
-                if succes:
-                    st.success("✅ Modèle uploadé sur HuggingFace !")
-                    st.balloons()
-                else:
-                    st.warning("⚠️ Upload échoué — mises à jour actives pour cette session uniquement.")
-
-    st.markdown("---")
-
-=======
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
     # ── Instructions réentraînement complet ──
     st.subheader("🖥️ Réentraînement complet hebdomadaire")
     st.info(
