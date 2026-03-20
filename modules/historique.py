@@ -43,21 +43,16 @@ def get_firebase_db():
 # CHARGEMENT HISTORIQUE (Firebase + local)
 # ============================================================
 def charger_historique():
-<<<<<<< HEAD
     historique_firebase = []
     historique_local    = []
 
     # Chargement Firebase
-=======
-    # Essai Firebase en priorité
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
     db = get_firebase_db()
     if db:
         try:
             docs = db.collection('predictions').order_by(
                 'date', direction='DESCENDING'
             ).limit(500).stream()
-<<<<<<< HEAD
             historique_firebase = [doc.to_dict() for doc in docs]
         except:
             pass
@@ -96,22 +91,6 @@ def charger_historique():
             pass
 
     return historique_local
-=======
-            historique = [doc.to_dict() for doc in docs]
-            if historique:
-                return historique
-        except:
-            pass
-
-    # Fallback : fichier local
-    if not os.path.exists(FICHIER_HISTORIQUE):
-        return []
-    try:
-        with open(FICHIER_HISTORIQUE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return []
->>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
 
 # ============================================================
 # SAUVEGARDE HISTORIQUE (Firebase + local)
