@@ -441,7 +441,7 @@ def afficher_interface_connexion():
                                 st.error(result.get("erreur", "Erreur lors de la création."))
 
     with tab2:
-        st.info("📱 La connexion par téléphone (OTP SMS) est disponible dans l'APK Android. Sur le web, utilisez l'onglet Email.")
+        st.info("📱 La connexion par téléphone (OTP SMS) est uniquement disponible dans l'APK Android. Sur le web, utilisez l'onglet 📧 Email.")
         st.markdown("**Étapes dans l'APK :**\n1. Entrez votre numéro (+225XXXXXXXX)\n2. Recevez un SMS\n3. Entrez le code reçu")
 
     with tab3:
@@ -537,18 +537,20 @@ def afficher_reset_password():
                 st.error("Veuillez entrer un email valide")
             else:
                 try:
-                    url = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
+                    url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
                     payload = {
                         "requestType": "PASSWORD_RESET",
                         "email": email
                     }
 
                     response = requests.post(url, json=payload)
+                    data = response.json()
 
                     if response.status_code == 200:
-                        st.success("📧 Email de réinitialisation envoyé")
+                        st.success("📧 Email de réinitialisation envoyé ! Vérifiez votre boîte mail.")
                     else:
-                        st.error("❌ Erreur lors de l'envoi")
+                        msg = data.get("error", {}).get("message", "Erreur inconnue")
+                        st.error(f"❌ {msg}")
                 except Exception as e:
                     st.error(f"Erreur : {e}")
 
