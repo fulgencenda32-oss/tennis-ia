@@ -390,7 +390,7 @@ def afficher_interface_connexion():
     """, unsafe_allow_html=True)
 
     # Onglets de connexion
-    tab1, tab2, tab3, tab4 = st.tabs(["📧 Email", "📱 Téléphone", "👤 Anonyme", "ℹ️ À propos"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📧 Email", "📱 Téléphone", "👤 Anonyme", "ℹ️ À propos", "🔑 Mot de passe oublié"])
 
     with tab1:
         mode = st.radio("Mode", ["Se connecter", "Créer un compte"], horizontal=True, label_visibility="collapsed")
@@ -469,6 +469,9 @@ def afficher_interface_connexion():
             - 👥 **Joueurs** : 26 802 joueurs référencés
             - 📱 **Développé par** : Fulgence N'da
         """)
+
+    with tab5:
+        afficher_reset_password()
 
     return False
 
