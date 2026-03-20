@@ -588,7 +588,6 @@ def page_mise_a_jour(modeles, df_base):
 
 
 
-    # ── Instructions réentraînement complet ──
 
 
     st.markdown("---")
