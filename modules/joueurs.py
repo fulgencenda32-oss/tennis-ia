@@ -242,8 +242,15 @@ def page_joueurs(modeles, df_base):
                 "Sélectionne un joueur", options_avec_autre
             )
 
-            # Si l'utilisateur choisit "Aucun de ces joueurs"
+            # Memoriser le choix
             if choix == "❌ Aucun de ces joueurs — rechercher via API":
+                st.session_state["joueur_choix_aucun"] = True
+                st.session_state["joueur_nom_aucun"] = nom_recherche
+            elif choix != "❌ Aucun de ces joueurs — rechercher via API":
+                st.session_state["joueur_choix_aucun"] = False
+
+            # Si l'utilisateur choisit "Aucun de ces joueurs"
+            if st.session_state.get("joueur_choix_aucun") and st.session_state.get("joueur_nom_aucun") == nom_recherche:
                 st.markdown("---")
                 st.subheader(f"➕ Ajouter {nom_recherche} à la base")
                 onglet_api2, onglet_csv2 = st.tabs(["🌐 Via API", "📁 Via CSV"])
