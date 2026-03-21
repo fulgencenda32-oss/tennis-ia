@@ -1,1888 +1,350 @@
 # ============================================================
-
-
-
-
-
 # MODULE MATCHS DU JOUR
-
-
-
-
-
 # ============================================================
-
-
-
-
-
 import streamlit as st
-
-
-
-
-
 import pandas as pd
-
-
-
-
-
 import numpy as np
-
-
-
-
-
 import requests
-
-
-
-
-
 import os
-
-
-
-
-
 from datetime import datetime, timedelta
-
-
-
-
-
 from dotenv import load_dotenv
 
-
-
-
-
-
-
-
-
-
-
 load_dotenv()
-
-
-
-
-
 API_KEY  = os.getenv("ALLSPORTS_API_KEY")
-
-
-
-
-
 BASE_URL = "https://apiv2.allsportsapi.com/tennis/"
 
-
-
-
-
-
-
-
-
-
-
 # ============================================================
-
-
-
-
-
-# RÉCUPÉRATION MATCHS
-
-
-
-
-
-# ============================================================
-
-
-
-
-
-@st.cache_data(ttl=1800)
-
-
-
-
-
-
-
-# ============================================================
-
 # DETECTION HORS-LIGNE
-
 # ============================================================
-
 def est_hors_ligne():
-
     try:
-
         import requests as _req
-
         _req.get("https://www.google.com", timeout=3)
-
         return False
-
     except Exception:
-
         return True
 
-
-
+# ============================================================
+# RECUPERATION MATCHS
+# ============================================================
+@st.cache_data(ttl=1800)
 def get_matchs_periode(date_debut, date_fin, api_key):
-
-
-
-
-
     try:
-
-
-
-
-
         r = requests.get(BASE_URL, params={
-
-
-
-
-
             "met"    : "Fixtures",
-
-
-
-
-
             "APIkey" : api_key,
-
-
-
-
-
             "from"   : date_debut,
-
-
-
-
-
             "to"     : date_fin,
-
-
-
-
-
         }, timeout=15)
-
-
-
-
-
         if r.status_code == 200:
-
-
-
-
-
             data = r.json()
-
-
-
-
-
             if data.get("success") == 1:
-
-
-
-
-
                 return data.get("result", [])
-
-
-
-
-
     except Exception as e:
-
-
-
-
-
         st.error(f"Erreur API : {e}")
-
-
-
-
-
     return []
 
-
-
-
-
-
-
-
-
-
-
 # ============================================================
-
-
-
-
-
 # TRAITEMENT MATCHS
-
-
-
-
-
 # ============================================================
-
-
-
-
-
-def traiter_matchs(matchs_raw, filtre_circuit="Tous",
-
-
-
-
-
-                   filtre_statut="Tous"):
-
-
-
-
-
+def traiter_matchs(matchs_raw, filtre_circuit="Tous", filtre_statut="Tous"):
     if not matchs_raw:
-
-
-
-
-
         return pd.DataFrame()
 
-
-
-
-
-
-
-
-
-
-
     rows = []
-
-
-
-
-
     for m in matchs_raw:
-
-
-
-
-
-        statut    = str(m.get('event_status', '')).lower()
-
-
-
-
-
-        circuit   = str(m.get('country_name', ''))
-
-
-
-
-
-        joueur_a  = str(m.get('event_first_player',  ''))
-
-
-
-
-
-        joueur_b  = str(m.get('event_second_player', ''))
-
-
-
-
-
-
-
-
-
-
+        statut   = str(m.get("event_status", "")).lower()
+        circuit  = str(m.get("country_name", ""))
+        joueur_a = str(m.get("event_first_player", ""))
+        joueur_b = str(m.get("event_second_player", ""))
 
         if not joueur_a or not joueur_b:
-
-
-
-
-
             continue
 
-
-
-
-
-
-
-
-
-
-
         rows.append({
-
-
-
-
-
-            'event_key'  : str(m.get('event_key', '')),
-
-
-
-
-
-            'Date'       : str(m.get('event_date', '')),
-
-
-
-
-
-            'Heure'      : str(m.get('event_time', '')),
-
-
-
-
-
-            'Joueur A'   : joueur_a,
-
-
-
-
-
-            'Joueur B'   : joueur_b,
-
-
-
-
-
-            'Tournoi'    : str(m.get('league_name', '')),
-
-
-
-
-
-            'Circuit'    : circuit,
-
-
-
-
-
-            'Round'      : str(m.get('league_round', '')),
-
-
-
-
-
-            'Score'      : str(m.get('event_final_result', '-')),
-
-
-
-
-
-            'Statut'     : str(m.get('event_status', '')),
-
-
-
-
-
-            'statut_low' : statut,
-
-
-
-
-
+            "event_key"        : str(m.get("event_key", "")),
+            "Date"             : str(m.get("event_date", "")),
+            "Heure"            : str(m.get("event_time", "")),
+            "Joueur A"         : joueur_a,
+            "Joueur B"         : joueur_b,
+            "first_player_key" : str(m.get("first_player_key", "")),
+            "second_player_key": str(m.get("second_player_key", "")),
+            "Tournoi"          : str(m.get("league_name", "")),
+            "Circuit"          : circuit,
+            "Round"            : str(m.get("league_round", "")),
+            "Score"            : str(m.get("event_final_result", "-")),
+            "Statut"           : str(m.get("event_status", "")),
+            "statut_low"       : statut,
         })
 
-
-
-
-
-
-
-
-
-
-
     df = pd.DataFrame(rows)
-
-
-
-
-
     if df.empty:
-
-
-
-
-
         return df
 
-
-
-
-
-
-
-
-
-
-
     if filtre_circuit != "Tous":
+        df = df[df["Circuit"].str.contains(filtre_circuit, case=False, na=False)]
 
-
-
-
-
-        df = df[df['Circuit'].str.contains(
-
-
-
-
-
-            filtre_circuit, case=False, na=False
-
-
-
-
-
-        )]
-
-
-
-
-
-
-
-
-
-
-
-    if filtre_statut == "À venir":
-
-
-
-
-
-        df = df[df['statut_low'].isin(
-
-
-
-
-
-            ['', 'notstarted', 'scheduled', 'ns']
-
-
-
-
-
-        )]
-
-
-
-
-
+    if filtre_statut == "A venir":
+        df = df[df["statut_low"].isin(["", "notstarted", "scheduled", "ns"])]
     elif filtre_statut == "En cours":
-
-
-
-
-
-        df = df[df['statut_low'].isin(
-
-
-
-
-
-            ['inprogress', 'live', '1st', '2nd', '3rd']
-
-
-
-
-
-        )]
-
-
-
-
-
-    elif filtre_statut == "Terminés":
-
-
-
-
-
-        df = df[df['statut_low'] == 'finished']
-
-
-
-
-
-
-
-
-
-
+        df = df[df["statut_low"].isin(["inprogress", "live", "1st", "2nd", "3rd"])]
+    elif filtre_statut == "Termines":
+        df = df[df["statut_low"] == "finished"]
 
     return df.reset_index(drop=True)
 
-
-
-
-
-
-
-
-
-
+# ============================================================
+# RECHERCHE NOM DANS LA BASE
+# ============================================================
+def trouver_nom_base(nom, liste_joueurs):
+    """Trouve le meilleur nom dans la base via recherche floue."""
+    if "/" in nom:
+        return None  # Ignorer les doubles
+    try:
+        from rapidfuzz import process, fuzz
+        resultats = process.extract(nom, liste_joueurs, scorer=fuzz.WRatio, limit=3)
+        if resultats and resultats[0][1] >= 60:
+            return resultats[0][0]
+    except:
+        pass
+    return None
 
 # ============================================================
+# AFFICHAGE RESULTAT PREDICTION
+# ============================================================
+def afficher_resultat_pred(res, j_a, j_b, surface):
+    st.success("Prediction calculee !")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("Vainqueur", res["vainqueur"], f"{res['proba_v']}%")
+    with c2: st.metric("Score", res["score_exact"])
+    with c3: st.metric("Sets", f"{res['nb_sets']} sets")
+    with c4: st.metric("Handicap", f"{res['handicap']} set(s)")
 
+    stats = pd.DataFrame({
+        "Statistique": ["ELO general", f"ELO {surface}", "Forme", "H2H", "Classement"],
+        j_a: [res["elo_a"], res["elo_a_surf"], f"{res['forme_a']}%", res["h2h_a"], f"#{res['rank_a']}"],
+        j_b: [res["elo_b"], res["elo_b_surf"], f"{res['forme_b']}%", res["h2h_b"], f"#{res['rank_b']}"],
+    })
+    st.dataframe(stats, hide_index=True, use_container_width=True)
 
+    import plotly.graph_objects as go
+    fig = go.Figure(go.Bar(
+        x=[j_a, j_b],
+        y=[res["proba_a"], res["proba_b"]],
+        marker_color=["#2d9e56", "#FF5722"],
+        text=[f"{res['proba_a']}%", f"{res['proba_b']}%"],
+        textposition="auto",
+    ))
+    fig.update_layout(
+        yaxis_range=[0, 100], height=280,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"),
+        margin=dict(t=10)
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-
-
+# ============================================================
 # PAGE MATCHS DU JOUR
-
-
-
-
-
 # ============================================================
-
-
-
-
-
 def page_matchs_jour(modeles, df_base):
-
-
-
-
-
-    st.title("📅 Matchs du jour")
-
-
-
-
-
+    st.title("Matchs du jour")
     st.markdown("---")
-
-
-
-
-
-
-
-
-
-
 
     col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-
-
-
-
-
     with col1:
-
-
-
-
-
-        date_choisie = st.date_input(
-
-
-
-
-
-            "📅 Date",
-
-
-
-
-
-            value=datetime.now().date()
-
-
-
-
-
-        )
-
-
-
-
-
+        date_choisie = st.date_input("Date", value=datetime.now().date())
     with col2:
-
-
-
-
-
-        filtre_circuit = st.selectbox(
-
-
-
-
-
-            "🎾 Circuit",
-
-
-
-
-
-            ["Tous", "ATP", "WTA", "Challenger", "ITF", "Futures"]
-
-
-
-
-
-        )
-
-
-
-
-
+        filtre_circuit = st.selectbox("Circuit", ["Tous", "ATP", "WTA", "Challenger", "ITF", "Futures"])
     with col3:
-
-
-
-
-
-        filtre_statut = st.selectbox(
-
-
-
-
-
-            "🔎 Statut",
-
-
-
-
-
-            ["Tous", "À venir", "En cours", "Terminés"]
-
-
-
-
-
-        )
-
-
-
-
-
+        filtre_statut = st.selectbox("Statut", ["Tous", "A venir", "En cours", "Termines"])
     with col4:
-
-
-
-
-
         st.markdown("<br>", unsafe_allow_html=True)
+        charger = st.button("Charger", type="primary")
 
-
-
-
-
-        charger = st.button("📋 Charger", type="primary")
-
-
-
-
-
-
-
-
-
-
-
-    predire_tous = st.button("⚡ Prédire TOUS les matchs automatiquement")
-
-
-
-
-
-
-
-
-
-
-
+    predire_tous = st.button("Predire TOUS les matchs automatiquement")
     st.markdown("---")
 
-
-
-
-
-
-
-
-
-
-
-    if charger or predire_tous or st.session_state.get('auto_charger'):
-
-
-
-
-
-        st.session_state['auto_charger'] = False
-
-
-
-
-
+    if charger or predire_tous or st.session_state.get("auto_charger"):
+        st.session_state["auto_charger"] = False
         date_str     = str(date_choisie)
-
-
-
-
-
         date_str_fin = str(date_choisie + timedelta(days=1))
 
-
-
-
-
-
-
-
-
-
-
         if est_hors_ligne():
-
-            st.warning("📵 Mode hors-ligne — Matchs du jour non disponibles sans connexion.")
-
-            st.info("💡 Reconnecte-toi pour accéder aux matchs en temps réel.")
-
+            st.warning("Mode hors-ligne - Matchs du jour non disponibles sans connexion.")
             return
 
-
-
-        with st.spinner("⏳ Chargement des matchs..."):
-
-
-
-
-
-            key = os.getenv("ALLSPORTS_API_KEY")
-
-
-
-
-
+        with st.spinner("Chargement des matchs..."):
+            key        = os.getenv("ALLSPORTS_API_KEY")
             matchs_raw = get_matchs_periode(date_str, date_str, key)
-
-
-
-
-
             if not matchs_raw:
-
-
-
-
-
                 matchs_raw = get_matchs_periode(date_str, date_str_fin, key)
-
-
-
-
-
-
-
-
-
-
 
         df_matchs = traiter_matchs(matchs_raw, filtre_circuit, filtre_statut)
 
-
-
-
-
-
-
-
-
-
-
         if df_matchs.empty:
-
-
-
-
-
-            st.warning("⚠️ Aucun match trouvé. Essaie une autre date ou un autre filtre.")
-
-
-
-
-
+            st.warning("Aucun match trouve. Essaie une autre date ou un autre filtre.")
             return
 
-
-
-
-
-
-
-
-
-
-
+        # Stats
         total    = len(df_matchs)
-
-
-
-
-
-        termines = len(df_matchs[df_matchs['statut_low'] == 'finished'])
-
-
-
-
-
-        en_cours = len(df_matchs[df_matchs['statut_low'].isin(['inprogress','live'])])
-
-
-
-
-
+        termines = len(df_matchs[df_matchs["statut_low"] == "finished"])
+        en_cours = len(df_matchs[df_matchs["statut_low"].isin(["inprogress", "live"])])
         a_venir  = total - termines - en_cours
 
-
-
-
-
-
-
-
-
-
-
         c1, c2, c3, c4 = st.columns(4)
-
-
-
-
-
-        with c1: st.metric("📋 Total",     total)
-
-
-
-
-
-        with c2: st.metric("⏳ À venir",   a_venir)
-
-
-
-
-
-        with c3: st.metric("🔴 En cours",  en_cours)
-
-
-
-
-
-        with c4: st.metric("✅ Terminés",  termines)
-
-
-
-
-
-
-
-
-
-
-
+        with c1: st.metric("Total",    total)
+        with c2: st.metric("A venir",  a_venir)
+        with c3: st.metric("En cours", en_cours)
+        with c4: st.metric("Termines", termines)
         st.markdown("---")
 
+        liste_joueurs = list(modeles["elo_final"].keys())
 
-
-
-
-
-
-
-
-
-
+        # ── Predire TOUS ──
         if predire_tous:
+            st.subheader("Predictions automatiques")
+            from modules.prediction import predire_match
 
+            a_predire = df_matchs[~df_matchs["statut_low"].isin(["finished"])].head(30)
+            if a_predire.empty:
+                st.info("Aucun match a venir a predire.")
+            else:
+                barre     = st.progress(0)
+                resultats = []
+                for i, (_, match) in enumerate(a_predire.iterrows()):
+                    j_a_raw = match["Joueur A"]
+                    j_b_raw = match["Joueur B"]
+                    j_a = trouver_nom_base(j_a_raw, liste_joueurs) or j_a_raw
+                    j_b = trouver_nom_base(j_b_raw, liste_joueurs) or j_b_raw
+                    circ = match["Circuit"].upper()
+                    if "WTA" in circ:          t = "WTA"
+                    elif "CHALLENGER" in circ: t = "Challenger"
+                    elif "ITF" in circ:        t = "ITF"
+                    else:                      t = "ATP"
+                    try:
+                        res = predire_match(j_a, j_b, modeles, df_base, surface="Hard", tournoi=t)
+                        resultats.append({
+                            "Joueur A"    : j_a_raw,
+                            "Joueur B"    : j_b_raw,
+                            "Tournoi"     : match["Tournoi"],
+                            "Vainqueur IA": res["vainqueur"],
+                            "Probabilite" : f"{res['proba_v']}%",
+                            "Score predit": res["score_exact"],
+                            "Sets"        : res["nb_sets"],
+                            "Handicap"    : res["handicap"],
+                        })
+                    except:
+                        resultats.append({
+                            "Joueur A": j_a_raw, "Joueur B": j_b_raw,
+                            "Tournoi": match["Tournoi"], "Vainqueur IA": "N/A",
+                            "Probabilite": "N/A", "Score predit": "N/A",
+                            "Sets": "N/A", "Handicap": "N/A",
+                        })
+                    barre.progress((i + 1) / len(a_predire))
 
+                df_res = pd.DataFrame(resultats)
+                st.success(f"{len(df_res)} predictions calculees !")
+                st.dataframe(df_res, hide_index=True, use_container_width=True)
+                csv = df_res.to_csv(index=False)
+                st.download_button("Telecharger CSV", data=csv,
+                    file_name=f"predictions_{date_str}.csv", mime="text/csv")
+            st.markdown("---")
 
+        # ── Matchs EN COURS ──
+        df_en_cours = df_matchs[df_matchs["statut_low"].isin(["inprogress", "live"])]
+        if not df_en_cours.empty:
+            st.subheader(f"En cours ({len(df_en_cours)})")
+            df_aff = df_en_cours[["Heure","Joueur A","Joueur B","Tournoi","Circuit","Round","Score"]].copy()
+            st.dataframe(df_aff, hide_index=True, use_container_width=True)
+            st.markdown("---")
 
+        # ── Matchs TERMINES ──
+        df_termines = df_matchs[df_matchs["statut_low"] == "finished"]
+        if not df_termines.empty:
+            st.subheader(f"Termines ({len(df_termines)})")
+            df_aff = df_termines[["Heure","Joueur A","Joueur B","Tournoi","Circuit","Round","Score"]].copy()
+            st.dataframe(df_aff, hide_index=True, use_container_width=True)
+            st.markdown("---")
 
-            st.subheader("⚡ Prédictions automatiques")
+        # ── Matchs A VENIR avec bouton Predire ──
+        df_a_venir = df_matchs[df_matchs["statut_low"].isin(["", "notstarted", "scheduled", "ns"])]
+        if not df_a_venir.empty:
+            st.subheader(f"A venir ({len(df_a_venir)})")
 
+            # Pagination
+            nb_par_page = 20
+            nb_pages    = max(1, (len(df_a_venir) - 1) // nb_par_page + 1)
+            if "page_matchs" not in st.session_state:
+                st.session_state["page_matchs"] = 0
+            page_actuelle = st.session_state["page_matchs"]
 
+            col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+            with col_p1:
+                if st.button("Precedent", key="prev_page") and page_actuelle > 0:
+                    st.session_state["page_matchs"] -= 1
+                    st.rerun()
+            with col_p2:
+                st.markdown(f"<p style='text-align:center'>Page {page_actuelle+1} / {nb_pages}</p>", unsafe_allow_html=True)
+            with col_p3:
+                if st.button("Suivant", key="next_page") and page_actuelle < nb_pages - 1:
+                    st.session_state["page_matchs"] += 1
+                    st.rerun()
 
+            debut = page_actuelle * nb_par_page
+            fin   = debut + nb_par_page
+            df_page = df_a_venir.iloc[debut:fin].reset_index(drop=True)
 
+            if "pred_resultats" not in st.session_state:
+                st.session_state["pred_resultats"] = {}
 
             from modules.prediction import predire_match
 
-
-
-
-
-
-
-
-
-
-
-            a_predire = df_matchs[
-
-
-
-
-
-                ~df_matchs['statut_low'].isin(['finished'])
-
-
-
-
-
-            ].head(30)
-
-
-
-
-
-
-
-
-
-
-
-            if a_predire.empty:
-
-
-
-
-
-                st.info("Aucun match à venir à prédire.")
-
-
-
-
-
-            else:
-
-
-
-
-
-                barre     = st.progress(0)
-
-
-
-
-
-                resultats = []
-
-
-
-
-
-
-
-
-
-
-
-                for i, (_, match) in enumerate(a_predire.iterrows()):
-
-
-
-
-
-                    j_a  = match['Joueur A']
-
-
-
-
-
-                    j_b  = match['Joueur B']
-
-
-
-
-
-                    circ = match['Circuit'].upper()
-
-
-
-
-
-                    if 'WTA' in circ:          t = 'WTA'
-
-
-
-
-
-                    elif 'CHALLENGER' in circ: t = 'Challenger'
-
-
-
-
-
-                    elif 'ITF' in circ:        t = 'ITF'
-
-
-
-
-
-                    else:                      t = 'ATP'
-
-
-
-
-
-
-
-
-
-
-
-                    try:
-
-
-
-
-
-                        res = predire_match(
-
-
-
-
-
-                            j_a, j_b, modeles, df_base,
-
-
-
-
-
-                            surface='Hard', tournoi=t,
-
-
-
-
-
-                        )
-
-
-
-
-
-                        resultats.append({
-
-
-
-
-
-                            'Joueur A'    : j_a,
-
-
-
-
-
-                            'Joueur B'    : j_b,
-
-
-
-
-
-                            'Tournoi'     : match['Tournoi'],
-
-
-
-
-
-                            'Vainqueur IA': res['vainqueur'],
-
-
-
-
-
-                            'Probabilité' : f"{res['proba_v']}%",
-
-
-
-
-
-                            'Score prédit': res['score_exact'],
-
-
-
-
-
-                            'Sets'        : res['nb_sets'],
-
-
-
-
-
-                            'Handicap'    : res['handicap'],
-
-
-
-
-
-                        })
-
-
-
-
-
-                    except:
-
-
-
-
-
-                        resultats.append({
-
-
-
-
-
-                            'Joueur A'    : j_a,
-
-
-
-
-
-                            'Joueur B'    : j_b,
-
-
-
-
-
-                            'Tournoi'     : match['Tournoi'],
-
-
-
-
-
-                            'Vainqueur IA': 'N/A',
-
-
-
-
-
-                            'Probabilité' : 'N/A',
-
-
-
-
-
-                            'Score prédit': 'N/A',
-
-
-
-
-
-                            'Sets'        : 'N/A',
-
-
-
-
-
-                            'Handicap'    : 'N/A',
-
-
-
-
-
-                        })
-
-
-
-
-
-
-
-
-
-
-
-                    barre.progress((i+1) / len(a_predire))
-
-
-
-
-
-
-
-
-
-
-
-                df_res = pd.DataFrame(resultats)
-
-
-
-
-
-                st.success(f"✅ {len(df_res)} prédictions calculées !")
-
-
-
-
-
-                st.dataframe(df_res, hide_index=True, use_container_width=True)
-
-
-
-
-
-
-
-
-
-
-
-                csv = df_res.to_csv(index=False)
-
-
-
-
-
-                st.download_button(
-
-
-
-
-
-                    "📥 Télécharger CSV",
-
-
-
-
-
-                    data      = csv,
-
-
-
-
-
-                    file_name = f"predictions_{date_str}.csv",
-
-
-
-
-
-                    mime      = "text/csv"
-
-
-
-
-
-                )
-
-
-
-
-
-
-
-
-
-
-
-            st.markdown("---")
-
-
-
-
-
-
-
-
-
-
-
-        def emoji_statut(s):
-
-
-
-
-
-            s = str(s).lower()
-
-
-
-
-
-            if s == 'finished':                   return '✅'
-
-
-
-
-
-            if s in ['inprogress', 'live']:        return '🔴'
-
-
-
-
-
-            return '⏳'
-
-
-
-
-
-
-
-
-
-
-
-        st.subheader(f"📋 {total} matchs 🎾 {date_str}")
-
-
-
-
-
-        df_affich = df_matchs[[
-
-
-
-
-
-            'Heure','Joueur A','Joueur B',
-
-
-
-
-
-            'Tournoi','Circuit','Round','Score','Statut'
-
-
-
-
-
-        ]].copy()
-
-
-
-
-
-        df_affich.insert(0, '.', df_matchs['statut_low'].apply(emoji_statut))
-
-
-
-
-
-
-
-
-
-
-
-        st.dataframe(df_affich, hide_index=True, use_container_width=True, height=400)
-
-
-
-
-
-
-
-
-
-
-
-        st.markdown("---")
-
-
-
-
-
-
-
-
-
-
-
-        st.subheader("🔮 Prédire un match individuel")
-
-
-
-
-
-        options_matchs = [
-
-
-
-
-
-            f"{row['Joueur A']} vs {row['Joueur B']} 🎾 {row['Tournoi']}"
-
-
-
-
-
-            for _, row in df_matchs.iterrows()
-
-
-
-
-
-        ]
-
-
-
-
-
-
-
-
-
-
-
-        match_choisi = st.selectbox("Sélectionne un match", options_matchs, key="match_individuel")
-
-
-
-
-
-
-
-
-
-
-
-        col_s1, col_s2 = st.columns(2)
-
-
-
-
-
-        with col_s1:
-
-
-
-
-
-            surface_ind = st.selectbox("Surface", ["Hard","Clay","Grass","Carpet"], key="surf_ind")
-
-
-
-
-
-        with col_s2:
-
-
-
-
-
-            best_of_ind = st.selectbox("Format", [3, 5], format_func=lambda x: f"Best of {x}", key="bo_ind")
-
-
-
-
-
-
-
-
-
-
-
-        if st.button("🔮 Prédire ce match", type="primary"):
-
-
-
-
-
-            idx   = options_matchs.index(match_choisi)
-
-
-
-
-
-            match = df_matchs.iloc[idx]
-
-
-
-
-
-            j_a   = match['Joueur A']
-
-
-
-
-
-            j_b   = match['Joueur B']
-
-
-
-
-
-
-
-
-
-
-
-            circ = match['Circuit'].upper()
-
-
-
-
-
-            if 'WTA' in circ:          t = 'WTA'
-
-
-
-
-
-            elif 'CHALLENGER' in circ: t = 'Challenger'
-
-
-
-
-
-            elif 'ITF' in circ:        t = 'ITF'
-
-
-
-
-
-            else:                      t = 'ATP'
-
-
-
-
-
-
-
-
-
-
-
-            with st.spinner("⏳ Calcul en cours..."):
-
-
-
-
-
-                from modules.prediction import predire_match
-
-
-
-
-
-                try:
-
-
-
-
-
-                    res = predire_match(
-
-
-
-
-
-                        j_a, j_b, modeles, df_base,
-
-
-
-
-
-                        surface     = surface_ind,
-
-
-
-
-
-                        tournoi     = t,
-
-
-
-
-
-                        round_match = str(match['Round']),
-
-
-
-
-
-                        best_of     = best_of_ind,
-
-
-
-
-
-                    )
-
-
-
-
-
-
-
-
-
-
-
-                    st.success("✅ Prédiction calculée !")
-
-
-
-
-
-                    st.markdown("---")
-
-
-
-
-
-
-
-
-
-
-
-                    c1, c2, c3, c4 = st.columns(4)
-
-
-
-
-
-                    with c1:
-
-
-
-
-
-                        st.metric("🏆 Vainqueur", res['vainqueur'], f"{res['proba_v']}%")
-
-
-
-
-
-                    with c2:
-
-
-
-
-
-                        st.metric("📊 Score", res['score_exact'])
-
-
-
-
-
-                    with c3:
-
-
-
-
-
-                        st.metric("🎾 Sets", f"{res['nb_sets']} sets")
-
-
-
-
-
-                    with c4:
-
-
-
-
-
-                        st.metric("⚖️ Handicap", f"{res['handicap']} set(s)")
-
-
-
-
-
-
-
-
-
-
-
-                    stats = pd.DataFrame({
-
-
-
-
-
-                        'Statistique' : ['ELO général', f'ELO {surface_ind}', 'Forme récente', 'H2H', 'Classement'],
-
-
-
-
-
-                        j_a : [res['elo_a'], res['elo_a_surf'], f"{res['forme_a']}%", res['h2h_a'], f"#{res['rank_a']}"],
-
-
-
-
-
-                        j_b : [res['elo_b'], res['elo_b_surf'], f"{res['forme_b']}%", res['h2h_b'], f"#{res['rank_b']}"],
-
-
-
-
-
-                    })
-
-
-
-
-
-                    st.dataframe(stats, hide_index=True, use_container_width=True)
-
-
-
-
-
-
-
-
-
-
-
-                    import plotly.graph_objects as go
-
-
-
-
-
-                    fig = go.Figure(go.Bar(
-
-
-
-
-
-                        x=[j_a, j_b],
-
-
-
-
-
-                        y=[res['proba_a'], res['proba_b']],
-
-
-
-
-
-                        marker_color=['#2d9e56','#FF5722'],
-
-
-
-
-
-                        text=[f"{res['proba_a']}%", f"{res['proba_b']}%"],
-
-
-
-
-
-                        textposition='auto',
-
-
-
-
-
-                    ))
-
-
-
-
-
-                    fig.update_layout(
-
-
-
-
-
-                        yaxis_range=[0,100], height=280,
-
-
-
-
-
-                        plot_bgcolor='rgba(0,0,0,0)',
-
-
-
-
-
-                        paper_bgcolor='rgba(0,0,0,0)',
-
-
-
-
-
-                        font=dict(color='white'),
-
-
-
-
-
-                        margin=dict(t=10)
-
-
-
-
-
-                    )
-
-
-
-
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-
-
-
-
-
-
-
-
-
-
-                except Exception as e:
-
-
-
-
-
-                    st.error(f"❌ Erreur : {e}")
-
-
-
-
-
+            for i, (_, match) in enumerate(df_page.iterrows()):
+                j_a_raw = match["Joueur A"]
+                j_b_raw = match["Joueur B"]
+                event_key = match["event_key"]
+
+                # Ignorer les doubles
+                if "/" in j_a_raw or "/" in j_b_raw:
+                    continue
+
+                circ = match["Circuit"].upper()
+                if "WTA" in circ:          t = "WTA"
+                elif "CHALLENGER" in circ: t = "Challenger"
+                elif "ITF" in circ:        t = "ITF"
+                else:                      t = "ATP"
+
+                col_h, col_a, col_vs, col_b, col_t, col_btn = st.columns([1, 3, 0.5, 3, 2, 2])
+                with col_h:  st.markdown(f"**{match['Heure']}**")
+                with col_a:  st.markdown(f"{j_a_raw}")
+                with col_vs: st.markdown("**vs**")
+                with col_b:  st.markdown(f"{j_b_raw}")
+                with col_t:  st.markdown(f"*{match['Tournoi']}*")
+                with col_btn:
+                    if st.button("Predire", key=f"pred_{event_key}_{i}"):
+                        j_a = trouver_nom_base(j_a_raw, liste_joueurs) or j_a_raw
+                        j_b = trouver_nom_base(j_b_raw, liste_joueurs) or j_b_raw
+                        try:
+                            res = predire_match(
+                                j_a, j_b, modeles, df_base,
+                                surface="Hard", tournoi=t,
+                                round_match=str(match["Round"]),
+                            )
+                            st.session_state["pred_resultats"][event_key] = {
+                                "res": res, "j_a": j_a, "j_b": j_b,
+                                "j_a_raw": j_a_raw, "j_b_raw": j_b_raw
+                            }
+                        except Exception as e:
+                            st.session_state["pred_resultats"][event_key] = {"erreur": str(e)}
+
+                # Afficher resultat si disponible
+                if event_key in st.session_state["pred_resultats"]:
+                    data = st.session_state["pred_resultats"][event_key]
+                    if "erreur" in data:
+                        st.error(f"Erreur : {data['erreur']}")
+                    else:
+                        with st.expander(f"Resultat : {data['j_a_raw']} vs {data['j_b_raw']}", expanded=True):
+                            afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], "Hard")
+
+                st.divider()
