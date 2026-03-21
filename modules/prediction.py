@@ -8,6 +8,7 @@ from rapidfuzz import process, fuzz
 import json
 import os
 from datetime import datetime
+import random
 
 # ============================================================
 # CONVERSION SÉCURISÉE
@@ -169,7 +170,6 @@ def predire_match(
     handicap_p = int(modele_handi.predict(X)[0]) + 1
 
     # Score exact — utilise scores realistes varies
-    import random
     scores_2sets = [
         '6-4 6-3', '6-3 6-4', '6-2 6-4', '6-4 6-2',
         '7-5 6-3', '6-3 6-2', '7-6 6-4', '6-1 6-3',
