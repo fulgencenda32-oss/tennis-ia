@@ -344,25 +344,77 @@ def afficher_panel_admin():
                     st.write(f"**Rôle :** {u.get('role', 'user')}")
                     st.write(f"**Inscrit le :** {u.get('date_inscription', '-')[:10]}")
                 with col_b:
-                    # Bouton passer en premium
-                    if u.get("plan") != "premium" and u.get("email") != ADMIN_EMAIL:
-                        if st.button(f"⭐ Passer Premium", key=f"prem_{u.get('uid')}"):
-                            db.collection("users").document(u["uid"]).update({"plan": "premium"})
-                            st.success("Utilisateur passé en Premium !")
-                            st.rerun()
-                    # Bouton bloquer
                     if u.get("email") != ADMIN_EMAIL:
+                        # Bouton plan
+                        plan_actuel = u.get("plan", "gratuit")
+                        if plan_actuel != "premium":
+                            if st.button("⭐ Passer Premium", key=f"prem_{u.get('uid')}"):
+                                db.collection("users").document(u["uid"]).update({"plan": "premium"})
+                                st.success("Utilisateur passé en Premium !")
+                                st.rerun()
+                        else:
+                            if st.button("💳 Repasser Gratuit", key=f"grat_{u.get('uid')}"):
+                                db.collection("users").document(u["uid"]).update({"plan": "gratuit"})
+                                st.success("Utilisateur repassé en Gratuit !")
+                                st.rerun()
+                        # Bouton bloquer
                         statut = u.get("actif", True)
                         label = "🚫 Bloquer" if statut else "✅ Débloquer"
                         if st.button(label, key=f"block_{u.get('uid')}"):
                             db.collection("users").document(u["uid"]).update({"actif": not statut})
                             st.rerun()
 
-        # Paramètres globaux
+        # Parametres globaux
         st.markdown("#### ⚙️ Paramètres")
         mode = st.toggle("Mode Payant activé", value=MODE_PAYANT)
         if mode != MODE_PAYANT:
-            st.info("Pour changer le mode payant, modifiez `MODE_PAYANT` dans `modules/auth.py`")
+            st.info("Pour changer le mode payant, modifiez MODE_PAYANT dans modules/auth.py")
+
+        # Mise a jour classements
+        st.markdown("---")
+        st.markdown("#### 🏆 Mise à jour classements ATP/WTA")
+        st.caption("Importez un CSV avec colonnes : rank, player_name")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            csv_atp = st.file_uploader("CSV ATP", type=["csv"], key="upload_atp")
+            if csv_atp:
+                import pandas as _pd, json as _json, os as _os
+                df_atp = _pd.read_csv(csv_atp)
+                st.dataframe(df_atp.head(3))
+                if st.button("✅ Importer ATP", key="btn_atp"):
+                    try:
+                        _path = _os.path.join(_os.path.dirname(__file__), '..', 'data', 'classements.json')
+                        _data = _json.load(open(_path, encoding='utf-8')) if _os.path.exists(_path) else {"ATP": {}, "WTA": {}}
+                        _col_r = [c for c in df_atp.columns if 'rank' in c.lower()][0]
+                        _col_n = [c for c in df_atp.columns if 'name' in c.lower() or 'player' in c.lower()][0]
+                        for _, row in df_atp.iterrows():
+                            _data["ATP"][str(row[_col_n])] = int(row[_col_r])
+                        from datetime import datetime as _dt
+                        _data["date_maj"] = _dt.now().strftime("%Y-%m-%d")
+                        _json.dump(_data, open(_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                        st.success(f"✅ {len(df_atp)} joueurs ATP importes !")
+                    except Exception as ex:
+                        st.error(f"❌ Erreur : {ex}")
+        with col_c2:
+            csv_wta = st.file_uploader("CSV WTA", type=["csv"], key="upload_wta")
+            if csv_wta:
+                import pandas as _pd, json as _json, os as _os
+                df_wta = _pd.read_csv(csv_wta)
+                st.dataframe(df_wta.head(3))
+                if st.button("✅ Importer WTA", key="btn_wta"):
+                    try:
+                        _path = _os.path.join(_os.path.dirname(__file__), '..', 'data', 'classements.json')
+                        _data = _json.load(open(_path, encoding='utf-8')) if _os.path.exists(_path) else {"ATP": {}, "WTA": {}}
+                        _col_r = [c for c in df_wta.columns if 'rank' in c.lower()][0]
+                        _col_n = [c for c in df_wta.columns if 'name' in c.lower() or 'player' in c.lower()][0]
+                        for _, row in df_wta.iterrows():
+                            _data["WTA"][str(row[_col_n])] = int(row[_col_r])
+                        from datetime import datetime as _dt
+                        _data["date_maj"] = _dt.now().strftime("%Y-%m-%d")
+                        _json.dump(_data, open(_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+                        st.success(f"✅ {len(df_wta)} joueurs WTA importes !")
+                    except Exception as ex:
+                        st.error(f"❌ Erreur : {ex}")
 
     except Exception as e:
         st.error(f"Erreur panel admin : {e}")
