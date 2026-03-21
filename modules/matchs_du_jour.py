@@ -299,6 +299,6 @@ def page_matchs_jour(modeles, df_base):
                         if "erreur" in data:
                             st.error(f"Erreur : {data['erreur']}")
                         else:
-                            with st.expander(f"Resultat : {data['j_a_raw']} vs {data['j_b_raw']}", expanded=True):
-                                afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], "Hard")
+                            st.success(f"Vainqueur : {data['res']['vainqueur']} ({data['res']['proba_v']}%) | Score : {data['res']['score_exact']} | Sets : {data['res']['nb_sets']}")
+                            afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], "Hard")
                     st.divider()
