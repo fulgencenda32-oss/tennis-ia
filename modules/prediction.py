@@ -81,8 +81,24 @@ def predire_match(
     elo_a_surf = elo_surf.get(surface, {}).get(joueur_a, 1500.0)
     elo_b_surf = elo_surf.get(surface, {}).get(joueur_b, 1500.0)
 
-    # Classement — conversion sécurisée
+    # Classement — consulte classements.json en priorite
+    import json as _json
+    _classements_cache = {}
+    try:
+        import os as _os
+        _path = _os.path.join(_os.path.dirname(__file__), '..', 'data', 'classements.json')
+        _data = _json.load(open(_path, encoding='utf-8'))
+        _classements_cache = {**_data.get('ATP', {}), **_data.get('WTA', {})}
+    except:
+        pass
+
     def get_rank(joueur):
+        if joueur in _classements_cache:
+            return _classements_cache[joueur]
+        nom_court = joueur.split()[-1] if joueur else ""
+        for nom_complet, rang in _classements_cache.items():
+            if nom_court and nom_court.lower() in nom_complet.lower():
+                return rang
         if df_base is None:
             return 500
         mask = (
@@ -91,7 +107,6 @@ def predire_match(
         )
         rows = df_base[mask]
         if len(rows) == 0: return 500
-        # Cherche la meilleure valeur disponible
         for _, row in rows.iloc[::-1].iterrows():
             if row['winner_name'] == joueur:
                 r = safe_float(row.get('winner_rank', 0))
@@ -100,6 +115,7 @@ def predire_match(
             if 0 < r < 2000:
                 return r
         return 500
+
 
     rank_a = get_rank(joueur_a)
     rank_b = get_rank(joueur_b)
