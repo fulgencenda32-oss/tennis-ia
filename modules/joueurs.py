@@ -185,11 +185,15 @@ def get_profil_joueur(nom, modeles, df_base):
 # ============================================================
 def ajouter_joueur_api(nom):
     try:
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        date_fin = today.strftime("%Y-%m-%d")
+        date_debut = (today - timedelta(days=90)).strftime("%Y-%m-%d")
         res = requests.get(BASE_URL, params={
             "met"    : "Fixtures",
             "APIkey" : API_KEY,
-            "from"   : "2025-01-01",
-            "to"     : "2026-03-18",
+            "from"   : date_debut,
+            "to"     : date_fin,
         }, timeout=15)
         if res.status_code == 200:
             data = res.json()
