@@ -319,6 +319,7 @@ if CHARGE:
     from modules.mise_a_jour    import page_mise_a_jour
     from modules.performance    import page_performance
     from modules.matchs_du_jour import page_matchs_jour
+    from modules.paiement import page_paiement
 
     # Onglets de base
     onglets = [
