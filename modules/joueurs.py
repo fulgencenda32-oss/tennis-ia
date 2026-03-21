@@ -283,8 +283,8 @@ def page_joueurs(modeles, df_base):
                                 df_new = pd.DataFrame(nouveaux)
                                 if df_base is not None:
                                     st.session_state["df_base"] = pd.concat([df_base, df_new], ignore_index=True)
-                                st.success(f"✅ {nom_recherche} ajouté ! Relancez la recherche.")
-                                st.rerun()
+                                st.success(f"✅ {nom_recherche} ajouté ! Tapez à nouveau son nom pour le trouver.")
+                                st.session_state["matchs_api_similar"] = []
                         else:
                             st.error(f"❌ {nom_recherche} non trouvé via API")
                             st.warning("💡 Essayez l'onglet 📁 Via CSV")
@@ -304,8 +304,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                             st.session_state["modeles"] = modeles_maj
                             if df_base is not None:
                                 st.session_state["df_base"] = pd.concat([df_base, df_up], ignore_index=True)
-                            st.success(f"✅ {nom_recherche} ajouté avec {len(nouveaux)} matchs !")
-                            st.rerun()
+                            st.success(f"✅ {nom_recherche} ajouté avec {len(nouveaux)} matchs ! Tapez à nouveau son nom pour le trouver.")
                 st.stop()
 
             joueur_sel = suggestions[options.index(choix)][0]
@@ -537,7 +536,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                             if df_base is not None:
                                 st.session_state["df_base"] = pd.concat([df_base, df_new], ignore_index=True)
                             st.success(f"✅ {nom_recherche} ajouté avec succès ! Relancez la recherche.")
-                            st.rerun()
                     else:
                         st.error(f"❌ {nom_recherche} non trouvé via API")
                         st.markdown("---")
@@ -560,4 +558,3 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         if df_base is not None:
                             st.session_state["df_base"] = pd.concat([df_base, df_up], ignore_index=True)
                         st.success(f"✅ {nom_recherche} ajouté avec {len(nouveaux)} matchs ! Relancez la recherche.")
-                        st.rerun()
