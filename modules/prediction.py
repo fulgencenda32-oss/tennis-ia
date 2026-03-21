@@ -308,7 +308,6 @@ def page_prediction(modeles, df_base):
                                         "loser_rank": m.get("second_player_rank", 500),
                                     })
                                 from modules.mise_a_jour import mise_a_jour_incrementale
-                                import pandas as pd
                                 modeles = mise_a_jour_incrementale(modeles, nouveaux)
                                 df_new = pd.DataFrame(nouveaux)
                                 if st.session_state.get("df_base") is not None:
@@ -325,7 +324,6 @@ Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R
 Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
                         fichier_a = st.file_uploader("📁 Upload CSV joueur A", type=["csv"], key="csv_a")
                         if fichier_a:
-                            import pandas as pd
                             df_up = pd.read_csv(fichier_a)
                             nouveaux = df_up.to_dict("records")
                             from modules.mise_a_jour import mise_a_jour_incrementale
@@ -392,7 +390,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                                         "loser_rank": m.get("second_player_rank", 500),
                                     })
                                 from modules.mise_a_jour import mise_a_jour_incrementale
-                                import pandas as pd
                                 modeles = mise_a_jour_incrementale(modeles, nouveaux)
                                 df_new = pd.DataFrame(nouveaux)
                                 if st.session_state.get("df_base") is not None:
@@ -409,7 +406,6 @@ Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R
 Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
                         fichier_b = st.file_uploader("📁 Upload CSV joueur B", type=["csv"], key="csv_b")
                         if fichier_b:
-                            import pandas as pd
                             df_up = pd.read_csv(fichier_b)
                             nouveaux = df_up.to_dict("records")
                             from modules.mise_a_jour import mise_a_jour_incrementale
