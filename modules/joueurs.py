@@ -252,14 +252,18 @@ def page_joueurs(modeles, df_base):
                         with st.spinner("Recherche en cours..."):
                             matchs_api = ajouter_joueur_api(nom_recherche)
                         if matchs_api:
-                            st.success(f"✅ {len(matchs_api)} matchs trouvés pour {nom_recherche} !")
-                            for m in matchs_api[:5]:
-                                st.write(
-                                    f"• {m.get('event_date')} — "
-                                    f"{m.get('event_first_player')} vs "
-                                    f"{m.get('event_second_player')}"
-                                )
-                            if st.button("✅ Confirmer l'ajout à la base", key="confirmer_api2"):
+                            st.session_state["matchs_api_similar"] = matchs_api
+                            st.session_state["nom_api_similar"] = nom_recherche
+                        else:
+                            st.session_state["matchs_api_similar"] = []
+                            st.error(f"❌ {nom_recherche} non trouvé via API")
+                            st.warning("💡 Essayez l'onglet 📁 Via CSV")
+                    if st.session_state.get("matchs_api_similar") and st.session_state.get("nom_api_similar") == nom_recherche:
+                        matchs_api = st.session_state["matchs_api_similar"]
+                        st.success(f"✅ {len(matchs_api)} matchs trouvés pour {nom_recherche} !")
+                        for m in matchs_api[:5]:
+                            st.write(f"• {m.get('event_date')} — {m.get('event_first_player')} vs {m.get('event_second_player')}")
+                        if st.button("✅ Confirmer l'ajout à la base", key="confirmer_api2"):
                                 nouveaux = []
                                 for m in matchs_api:
                                     nouveaux.append({
