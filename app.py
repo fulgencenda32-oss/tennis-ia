@@ -349,12 +349,13 @@ if CHARGE:
         page_historique()
     with tabs[5]:
         page_performance()
-    with tabs[6]:
-        page_paiement()
 
     # Panel Admin visible uniquement pour vous
-    if is_admin() and len(tabs) >= 8:
-        with tabs[7]:
+    idx_premium = len(onglets) - 1
+    with tabs[idx_premium]:
+        page_paiement()
+    if is_admin():
+        with tabs[6]:
             afficher_panel_admin()
 
     # Restaurer onglet actif via JavaScript
