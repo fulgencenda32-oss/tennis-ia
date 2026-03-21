@@ -202,23 +202,25 @@ def predire_match(
     vainqueur = joueur_a if proba_a >= 0.5 else joueur_b
     proba_v   = proba_a  if proba_a >= 0.5 else 1 - proba_a
 
-    # Value bet
-    value_bet_info = None
+    # Value bet — verifier les deux joueurs independamment
+    value_bet_info = []
     if cote_a and cote_b and cote_a > 1 and cote_b > 1:
         if proba_a > (1 / cote_a):
             valeur = proba_a * cote_a - 1
-            value_bet_info = {
+            value_bet_info.append({
                 'joueur' : joueur_a,
                 'cote'   : cote_a,
+                'proba'  : round(proba_a * 100, 1),
                 'valeur' : round(valeur * 100, 1)
-            }
-        elif (1 - proba_a) > (1 / cote_b):
+            })
+        if (1 - proba_a) > (1 / cote_b):
             valeur = (1 - proba_a) * cote_b - 1
-            value_bet_info = {
+            value_bet_info.append({
                 'joueur' : joueur_b,
                 'cote'   : cote_b,
+                'proba'  : round((1 - proba_a) * 100, 1),
                 'valeur' : round(valeur * 100, 1)
-            }
+            })
 
     return {
         'joueur_a'       : joueur_a,
@@ -243,7 +245,7 @@ def predire_match(
         'surface'        : surface,
         'tournoi'        : tournoi,
         'best_of'        : best_of,
-        'value_bet'      : value_bet_info['joueur'] if value_bet_info else None,
+        'value_bet'      : value_bet_info[0]['joueur'] if value_bet_info else None,
         'value_bet_info' : value_bet_info,
         'cotes_fournies' : cote_a is not None,
         'date'           : datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -627,15 +629,15 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             # Value bet
             if res['value_bet_info']:
-                info = res['value_bet_info']
-                st.success(
-                    f"💰 VALUE BET détecté sur "
-                    f"**{info['joueur']}** "
-                    f"— cote {info['cote']} "
-                    f"— valeur **+{info['valeur']}%**"
-                )
+                for info in res['value_bet_info']:
+                    st.success(
+                        f"💰 VALUE BET sur **{info['joueur']}** "
+                        f"— Cote bookmaker : {info['cote']} "
+                        f"— Probabilite IA : {info['proba']}% "
+                        f"— Valeur : **+{info['valeur']}%**"
+                    )
             elif utiliser_cotes:
-                st.info("❌ Pas de value bet détecté")
+                st.info("❌ Pas de value bet detecte")
 
             # Sauvegarde
             sauvegarder_prediction(res)
