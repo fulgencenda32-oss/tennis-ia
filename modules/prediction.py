@@ -9,6 +9,7 @@ import json
 import os
 from datetime import datetime
 import random
+import plotly.graph_objects as go
 
 # ============================================================
 # CONVERSION SÉCURISÉE
@@ -605,7 +606,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             with col_d2:
                 st.markdown("**🎯 Probabilités**")
-                import plotly.graph_objects as go
                 fig = go.Figure(go.Bar(
                     x=[joueur_a, joueur_b],
                     y=[res['proba_a'], res['proba_b']],
