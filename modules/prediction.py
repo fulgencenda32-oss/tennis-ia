@@ -184,12 +184,26 @@ def predire_match(
         else:
             score_exact = scores_liste
     else:
-        scores_defaut_2 = ['6-4 6-3', '6-3 6-4', '6-2 6-4', '6-4 6-2', '7-5 6-3', '6-3 6-2', '7-6 6-4', '6-1 6-3']
-        scores_defaut_3 = ['6-4 4-6 6-3', '7-5 4-6 6-4', '6-3 4-6 6-4', '6-4 3-6 7-5', '6-2 4-6 6-3', '7-6 4-6 6-3']
+        scores_defaut_2 = [
+            '6-4 6-3', '6-3 6-4', '6-2 6-4', '6-4 6-2',
+            '7-5 6-3', '6-3 6-2', '7-6 6-4', '6-1 6-3',
+            '6-4 6-1', '6-2 6-3', '7-5 6-4', '6-0 6-3',
+            '6-3 7-5', '6-4 7-5', '7-6 6-3', '6-1 6-2',
+            '6-2 6-1', '6-0 6-2', '7-6 7-5', '6-3 6-0'
+        ]
+        scores_defaut_3 = [
+            '6-4 4-6 6-3', '7-5 4-6 6-4', '6-3 4-6 6-4',
+            '6-4 3-6 7-5', '6-2 4-6 6-3', '7-6 4-6 6-3',
+            '6-3 3-6 6-4', '6-4 6-7 6-3', '7-5 6-7 6-4',
+            '6-1 4-6 6-3', '6-2 3-6 7-5', '6-4 2-6 6-3',
+            '7-6 3-6 6-4', '6-3 6-7 7-5', '6-0 4-6 6-3',
+            '6-4 4-6 7-5', '6-2 4-6 7-5', '7-5 3-6 6-3'
+        ]
+        import random
         if nb_sets_p == 2:
-            score_exact = np.random.choice(scores_defaut_2)
+            score_exact = random.choice(scores_defaut_2)
         else:
-            score_exact = np.random.choice(scores_defaut_3)
+            score_exact = random.choice(scores_defaut_3)
 
     vainqueur = joueur_a if proba_a >= 0.5 else joueur_b
     proba_v   = proba_a  if proba_a >= 0.5 else 1 - proba_a
