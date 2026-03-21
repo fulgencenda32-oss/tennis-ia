@@ -334,6 +334,7 @@ if CHARGE:
     # Ajouter onglet Admin si c'est Fulgence N'da
     if is_admin():
         onglets.append("🛡️ Admin")
+    onglets.append("⭐ Premium")
 
     tabs = st.tabs(onglets)
 
