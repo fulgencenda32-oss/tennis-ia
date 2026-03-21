@@ -245,34 +245,63 @@ def page_joueurs(modeles, df_base):
             # Si l'utilisateur choisit "Aucun de ces joueurs"
             if choix == "❌ Aucun de ces joueurs — rechercher via API":
                 st.markdown("---")
-                st.subheader("➕ Ajouter ce joueur")
-                col_add1, col_add2 = st.columns(2)
-                with col_add1:
-                    if st.button("🌐 Rechercher via API", key="btn_api_from_similar"):
+                st.subheader(f"➕ Ajouter {nom_recherche} à la base")
+                onglet_api2, onglet_csv2 = st.tabs(["🌐 Via API", "📁 Via CSV"])
+                with onglet_api2:
+                    if st.button("🔍 Rechercher via API", key="btn_api_from_similar"):
                         with st.spinner("Recherche en cours..."):
                             matchs_api = ajouter_joueur_api(nom_recherche)
                         if matchs_api:
-                            st.success(f"✅ {len(matchs_api)} matchs trouvés via API !")
+                            st.success(f"✅ {len(matchs_api)} matchs trouvés pour {nom_recherche} !")
                             for m in matchs_api[:5]:
                                 st.write(
                                     f"• {m.get('event_date')} — "
                                     f"{m.get('event_first_player')} vs "
                                     f"{m.get('event_second_player')}"
                                 )
+                            if st.button("✅ Confirmer l'ajout à la base", key="confirmer_api2"):
+                                nouveaux = []
+                                for m in matchs_api:
+                                    nouveaux.append({
+                                        "winner_name": m.get("event_first_player", ""),
+                                        "loser_name": m.get("event_second_player", ""),
+                                        "surface": m.get("event_ground", "Hard"),
+                                        "tourney_name": m.get("league_name", "Unknown"),
+                                        "tourney_date": m.get("event_date", "2026-01-01"),
+                                        "score": m.get("event_final_result", ""),
+                                        "round": m.get("event_round", "R32"),
+                                        "winner_rank": m.get("first_player_rank", 500),
+                                        "loser_rank": m.get("second_player_rank", 500),
+                                    })
+                                from modules.mise_a_jour import mise_a_jour_incrementale
+                                modeles_maj = mise_a_jour_incrementale(modeles, nouveaux)
+                                st.session_state["modeles"] = modeles_maj
+                                df_new = pd.DataFrame(nouveaux)
+                                if df_base is not None:
+                                    st.session_state["df_base"] = pd.concat([df_base, df_new], ignore_index=True)
+                                st.success(f"✅ {nom_recherche} ajouté ! Relancez la recherche.")
+                                st.rerun()
                         else:
-                            st.error("❌ Joueur non trouvé via API")
-                with col_add2:
-                    st.markdown("**📋 Format CSV attendu :**")
-                    st.code("winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank")
-                    fichier_csv = st.file_uploader(
-                        "📁 Upload CSV du joueur",
-                        type=['csv'],
-                        key="upload_joueur_similar"
-                    )
-                    if fichier_csv:
-                        df_up = pd.read_csv(fichier_csv)
-                        st.success(f"✅ {len(df_up)} matchs importés !")
+                            st.error(f"❌ {nom_recherche} non trouvé via API")
+                            st.warning("💡 Essayez l'onglet 📁 Via CSV")
+                with onglet_csv2:
+                    st.info("""📋 **Format CSV requis :**
+Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
+Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R32, 450, 1
+Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
+                    fichier_csv2 = st.file_uploader("📁 Upload CSV", type=["csv"], key="upload_joueur_similar")
+                    if fichier_csv2:
+                        df_up = pd.read_csv(fichier_csv2)
                         st.dataframe(df_up.head(5))
+                        if st.button("✅ Confirmer l'ajout via CSV", key="confirmer_csv2"):
+                            nouveaux = df_up.to_dict("records")
+                            from modules.mise_a_jour import mise_a_jour_incrementale
+                            modeles_maj = mise_a_jour_incrementale(modeles, nouveaux)
+                            st.session_state["modeles"] = modeles_maj
+                            if df_base is not None:
+                                st.session_state["df_base"] = pd.concat([df_base, df_up], ignore_index=True)
+                            st.success(f"✅ {nom_recherche} ajouté avec {len(nouveaux)} matchs !")
+                            st.rerun()
                 st.stop()
 
             joueur_sel = suggestions[options.index(choix)][0]
