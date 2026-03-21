@@ -168,42 +168,36 @@ def predire_match(
     nb_sets_p  = int(modele_sets.predict(X)[0]) + 2
     handicap_p = int(modele_handi.predict(X)[0]) + 1
 
-    # Score exact
-    cle      = (nb_sets_p, handicap_p)
-    cle_surf = (nb_sets_p, handicap_p, surface)
-    if cle_surf in dico_scores_surf:
-        scores_surf = dico_scores_surf[cle_surf]
-        if isinstance(scores_surf, list) and len(scores_surf) > 0:
-            score_exact = np.random.choice(scores_surf)
-        else:
-            score_exact = scores_surf
-    elif cle in dico_scores:
-        scores_liste = dico_scores[cle]
-        if isinstance(scores_liste, list) and len(scores_liste) > 0:
-            score_exact = np.random.choice(scores_liste)
-        else:
-            score_exact = scores_liste
+    # Score exact — utilise scores realistes varies
+    import random
+    scores_2sets = [
+        '6-4 6-3', '6-3 6-4', '6-2 6-4', '6-4 6-2',
+        '7-5 6-3', '6-3 6-2', '7-6 6-4', '6-1 6-3',
+        '6-4 6-1', '6-2 6-3', '7-5 6-4', '6-0 6-3',
+        '6-3 7-5', '6-4 7-5', '7-6 6-3', '6-1 6-2',
+        '6-2 6-1', '6-0 6-2', '7-6 7-5', '6-3 6-0',
+        '6-4 6-0', '7-5 7-6', '6-1 6-4', '6-0 6-1'
+    ]
+    scores_3sets = [
+        '6-4 4-6 6-3', '7-5 4-6 6-4', '6-3 4-6 6-4',
+        '6-4 3-6 7-5', '6-2 4-6 6-3', '7-6 4-6 6-3',
+        '6-3 3-6 6-4', '6-4 6-7 6-3', '7-5 6-7 6-4',
+        '6-1 4-6 6-3', '6-2 3-6 7-5', '6-4 2-6 6-3',
+        '7-6 3-6 6-4', '6-3 6-7 7-5', '6-0 4-6 6-3',
+        '6-4 4-6 7-5', '6-2 4-6 7-5', '7-5 3-6 6-3',
+        '6-3 2-6 6-4', '7-6 6-7 6-4', '6-1 3-6 6-4'
+    ]
+    scores_5sets = [
+        '6-4 3-6 4-6 7-6 6-4', '4-6 6-3 3-6 6-3 6-4',
+        '6-4 3-6 4-6 6-3 6-4', '3-6 6-4 6-4 3-6 6-3',
+        '6-3 6-4 3-6 4-6 6-4', '7-6 4-6 6-3 3-6 7-5'
+    ]
+    if nb_sets_p == 2:
+        score_exact = random.choice(scores_2sets)
+    elif nb_sets_p == 3:
+        score_exact = random.choice(scores_3sets)
     else:
-        scores_defaut_2 = [
-            '6-4 6-3', '6-3 6-4', '6-2 6-4', '6-4 6-2',
-            '7-5 6-3', '6-3 6-2', '7-6 6-4', '6-1 6-3',
-            '6-4 6-1', '6-2 6-3', '7-5 6-4', '6-0 6-3',
-            '6-3 7-5', '6-4 7-5', '7-6 6-3', '6-1 6-2',
-            '6-2 6-1', '6-0 6-2', '7-6 7-5', '6-3 6-0'
-        ]
-        scores_defaut_3 = [
-            '6-4 4-6 6-3', '7-5 4-6 6-4', '6-3 4-6 6-4',
-            '6-4 3-6 7-5', '6-2 4-6 6-3', '7-6 4-6 6-3',
-            '6-3 3-6 6-4', '6-4 6-7 6-3', '7-5 6-7 6-4',
-            '6-1 4-6 6-3', '6-2 3-6 7-5', '6-4 2-6 6-3',
-            '7-6 3-6 6-4', '6-3 6-7 7-5', '6-0 4-6 6-3',
-            '6-4 4-6 7-5', '6-2 4-6 7-5', '7-5 3-6 6-3'
-        ]
-        import random
-        if nb_sets_p == 2:
-            score_exact = random.choice(scores_defaut_2)
-        else:
-            score_exact = random.choice(scores_defaut_3)
+        score_exact = random.choice(scores_5sets)
 
     vainqueur = joueur_a if proba_a >= 0.5 else joueur_b
     proba_v   = proba_a  if proba_a >= 0.5 else 1 - proba_a

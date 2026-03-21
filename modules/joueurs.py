@@ -194,12 +194,15 @@ def ajouter_joueur_api(nom):
         if res.status_code == 200:
             data = res.json()
             if data.get("success") == 1:
-                nom_lower = nom.lower()
-                trouves   = []
+                nom_lower = nom.lower().strip()
+                mots = nom_lower.split()
+                trouves = []
                 for m in data.get("result", []):
-                    p1 = str(m.get('event_first_player',  '')).lower()
+                    p1 = str(m.get('event_first_player', '')).lower()
                     p2 = str(m.get('event_second_player', '')).lower()
-                    if nom_lower in p1 or nom_lower in p2:
+                    match1 = any(mot in p1 for mot in mots if len(mot) > 2)
+                    match2 = any(mot in p2 for mot in mots if len(mot) > 2)
+                    if match1 or match2:
                         trouves.append(m)
                 return trouves[:10]
     except Exception as e:
