@@ -267,16 +267,20 @@ def page_prediction(modeles, df_base):
                 options_a = [
                     f"{j} (similarité {s:.0f}%)"
                     for j, s in suggestions_a
-                ]
+                ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
                 choix_a  = st.selectbox(
                     "Sélectionne le joueur A",
                     options_a, key="choix_a"
                 )
-                joueur_a = suggestions_a[
-                    options_a.index(choix_a)
-                ][0]
-                elo_a = modeles['elo_final'].get(joueur_a, 1500)
-                st.info(f"ELO : **{round(elo_a)}**")
+                if choix_a == "❌ Aucun de ces joueurs — aller dans Joueurs":
+                    st.warning(f"⚠️ Va dans l'onglet 👤 Joueurs pour ajouter '{nom_a}'")
+                    joueur_a = None
+                else:
+                    joueur_a = suggestions_a[
+                        options_a.index(choix_a)
+                    ][0]
+                    elo_a = modeles['elo_final'].get(joueur_a, 1500)
+                    st.info(f"ELO : **{round(elo_a)}**")
             else:
                 st.warning(
                     f"⚠️ '{nom_a}' introuvable — "
@@ -297,16 +301,20 @@ def page_prediction(modeles, df_base):
                 options_b = [
                     f"{j} (similarité {s:.0f}%)"
                     for j, s in suggestions_b
-                ]
+                ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
                 choix_b  = st.selectbox(
                     "Sélectionne le joueur B",
                     options_b, key="choix_b"
                 )
-                joueur_b = suggestions_b[
-                    options_b.index(choix_b)
-                ][0]
-                elo_b = modeles['elo_final'].get(joueur_b, 1500)
-                st.info(f"ELO : **{round(elo_b)}**")
+                if choix_b == "❌ Aucun de ces joueurs — aller dans Joueurs":
+                    st.warning(f"⚠️ Va dans l'onglet 👤 Joueurs pour ajouter '{nom_b}'")
+                    joueur_b = None
+                else:
+                    joueur_b = suggestions_b[
+                        options_b.index(choix_b)
+                    ][0]
+                    elo_b = modeles['elo_final'].get(joueur_b, 1500)
+                    st.info(f"ELO : **{round(elo_b)}**")
             else:
                 st.warning(
                     f"⚠️ '{nom_b}' introuvable — "
