@@ -308,7 +308,11 @@ def page_prediction(modeles, df_base):
                             else:
                                 st.error(f"❌ {nom_a} non trouvé via API")
                     with onglet_csv_a:
-                        fichier_a = st.file_uploader("📁 Upload CSV", type=["csv"], key="csv_a")
+                        st.info("""📋 **Format CSV requis :**
+Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
+Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R32, 450, 1
+Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
+                        fichier_a = st.file_uploader("📁 Upload CSV joueur A", type=["csv"], key="csv_a")
                         if fichier_a:
                             import pandas as pd
                             df_up = pd.read_csv(fichier_a)
@@ -388,7 +392,11 @@ def page_prediction(modeles, df_base):
                             else:
                                 st.error(f"❌ {nom_b} non trouvé via API")
                     with onglet_csv_b:
-                        fichier_b = st.file_uploader("📁 Upload CSV", type=["csv"], key="csv_b")
+                        st.info("""📋 **Format CSV requis :**
+Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
+Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R32, 450, 1
+Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
+                        fichier_b = st.file_uploader("📁 Upload CSV joueur B", type=["csv"], key="csv_b")
                         if fichier_b:
                             import pandas as pd
                             df_up = pd.read_csv(fichier_b)
