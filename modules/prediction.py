@@ -273,8 +273,54 @@ def page_prediction(modeles, df_base):
                     options_a, key="choix_a"
                 )
                 if choix_a == "❌ Aucun de ces joueurs — aller dans Joueurs":
-                    st.warning(f"⚠️ Va dans l'onglet 👤 Joueurs pour ajouter '{nom_a}'")
                     joueur_a = None
+                    st.markdown("---")
+                    st.markdown(f"### ➕ Ajouter **{nom_a}** à la base")
+                    onglet_api_a, onglet_csv_a = st.tabs(["🌐 Via API", "📁 Via CSV"])
+                    with onglet_api_a:
+                        if st.button("🔍 Rechercher via API", key="api_a"):
+                            from modules.joueurs import ajouter_joueur_api
+                            with st.spinner("Recherche en cours..."):
+                                matchs_api = ajouter_joueur_api(nom_a)
+                            if matchs_api:
+                                nouveaux = []
+                                for m in matchs_api:
+                                    nouveaux.append({
+                                        "winner_name": m.get("event_first_player", ""),
+                                        "loser_name": m.get("event_second_player", ""),
+                                        "surface": m.get("event_ground", "Hard"),
+                                        "tourney_name": m.get("league_name", "Unknown"),
+                                        "tourney_date": m.get("event_date", "2026-01-01"),
+                                        "score": m.get("event_final_result", ""),
+                                        "round": m.get("event_round", "R32"),
+                                        "winner_rank": m.get("first_player_rank", 500),
+                                        "loser_rank": m.get("second_player_rank", 500),
+                                    })
+                                from modules.mise_a_jour import mise_a_jour_incrementale
+                                import pandas as pd
+                                modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                df_new = pd.DataFrame(nouveaux)
+                                if st.session_state.get("df_base") is not None:
+                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                st.session_state["modeles"] = modeles
+                                st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {nom_a} non trouvé via API")
+                    with onglet_csv_a:
+                        fichier_a = st.file_uploader("📁 Upload CSV", type=["csv"], key="csv_a")
+                        if fichier_a:
+                            import pandas as pd
+                            df_up = pd.read_csv(fichier_a)
+                            nouveaux = df_up.to_dict("records")
+                            from modules.mise_a_jour import mise_a_jour_incrementale
+                            modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                            if st.session_state.get("df_base") is not None:
+                                st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
+                            st.session_state["modeles"] = modeles
+                            st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                            st.rerun()
+                    st.markdown("---")
                 else:
                     joueur_a = suggestions_a[
                         options_a.index(choix_a)
@@ -307,8 +353,54 @@ def page_prediction(modeles, df_base):
                     options_b, key="choix_b"
                 )
                 if choix_b == "❌ Aucun de ces joueurs — aller dans Joueurs":
-                    st.warning(f"⚠️ Va dans l'onglet 👤 Joueurs pour ajouter '{nom_b}'")
                     joueur_b = None
+                    st.markdown("---")
+                    st.markdown(f"### ➕ Ajouter **{nom_b}** à la base")
+                    onglet_api_b, onglet_csv_b = st.tabs(["🌐 Via API", "📁 Via CSV"])
+                    with onglet_api_b:
+                        if st.button("🔍 Rechercher via API", key="api_b"):
+                            from modules.joueurs import ajouter_joueur_api
+                            with st.spinner("Recherche en cours..."):
+                                matchs_api = ajouter_joueur_api(nom_b)
+                            if matchs_api:
+                                nouveaux = []
+                                for m in matchs_api:
+                                    nouveaux.append({
+                                        "winner_name": m.get("event_first_player", ""),
+                                        "loser_name": m.get("event_second_player", ""),
+                                        "surface": m.get("event_ground", "Hard"),
+                                        "tourney_name": m.get("league_name", "Unknown"),
+                                        "tourney_date": m.get("event_date", "2026-01-01"),
+                                        "score": m.get("event_final_result", ""),
+                                        "round": m.get("event_round", "R32"),
+                                        "winner_rank": m.get("first_player_rank", 500),
+                                        "loser_rank": m.get("second_player_rank", 500),
+                                    })
+                                from modules.mise_a_jour import mise_a_jour_incrementale
+                                import pandas as pd
+                                modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                df_new = pd.DataFrame(nouveaux)
+                                if st.session_state.get("df_base") is not None:
+                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                st.session_state["modeles"] = modeles
+                                st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {nom_b} non trouvé via API")
+                    with onglet_csv_b:
+                        fichier_b = st.file_uploader("📁 Upload CSV", type=["csv"], key="csv_b")
+                        if fichier_b:
+                            import pandas as pd
+                            df_up = pd.read_csv(fichier_b)
+                            nouveaux = df_up.to_dict("records")
+                            from modules.mise_a_jour import mise_a_jour_incrementale
+                            modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                            if st.session_state.get("df_base") is not None:
+                                st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
+                            st.session_state["modeles"] = modeles
+                            st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
+                            st.rerun()
+                    st.markdown("---")
                 else:
                     joueur_b = suggestions_b[
                         options_b.index(choix_b)
