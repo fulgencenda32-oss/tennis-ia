@@ -330,7 +330,6 @@ def page_prediction(modeles, df_base):
                                     st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
                                 st.session_state["modeles"] = modeles
                                 st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
-                                st.rerun()
                             else:
                                 st.error(f"❌ {nom_a} non trouvé via API")
                     with onglet_csv_a:
@@ -348,7 +347,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                                 st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
                             st.session_state["modeles"] = modeles
                             st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
-                            st.rerun()
                     st.markdown("---")
                 else:
                     joueur_a = suggestions_a[
@@ -412,7 +410,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                                     st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
                                 st.session_state["modeles"] = modeles
                                 st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
-                                st.rerun()
                             else:
                                 st.error(f"❌ {nom_b} non trouvé via API")
                     with onglet_csv_b:
@@ -430,7 +427,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                                 st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
                             st.session_state["modeles"] = modeles
                             st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
-                            st.rerun()
                     st.markdown("---")
                 else:
                     joueur_b = suggestions_b[

@@ -245,7 +245,6 @@ def page_historique():
             historique[id_pred - 1]['score_reel'] = score_reel
         sauvegarder_historique(historique)
         st.success(f"✅ Résultat enregistré ! Vainqueur réel : {choix_vainqueur}")
-        st.rerun()
 
     st.markdown("---")
 

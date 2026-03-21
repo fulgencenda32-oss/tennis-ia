@@ -350,19 +350,17 @@ def afficher_panel_admin():
                         if plan_actuel != "premium":
                             if st.button("⭐ Passer Premium", key=f"prem_{u.get('uid')}"):
                                 db.collection("users").document(u["uid"]).update({"plan": "premium"})
-                                st.success("Utilisateur passé en Premium !")
-                                st.rerun()
+                                st.success("Utilisateur passé en Premium ! Rechargez pour voir le changement.")
                         else:
                             if st.button("💳 Repasser Gratuit", key=f"grat_{u.get('uid')}"):
                                 db.collection("users").document(u["uid"]).update({"plan": "gratuit"})
-                                st.success("Utilisateur repassé en Gratuit !")
-                                st.rerun()
+                                st.success("Utilisateur repassé en Gratuit ! Rechargez pour voir le changement.")
                         # Bouton bloquer
                         statut = u.get("actif", True)
                         label = "🚫 Bloquer" if statut else "✅ Débloquer"
                         if st.button(label, key=f"block_{u.get('uid')}"):
                             db.collection("users").document(u["uid"]).update({"actif": not statut})
-                            st.rerun()
+                            st.success("Statut mis à jour ! Rechargez pour voir le changement.")
 
         # Parametres globaux
         st.markdown("#### ⚙️ Paramètres")
