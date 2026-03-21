@@ -353,7 +353,7 @@ if CHARGE:
         page_paiement()
 
     # Panel Admin visible uniquement pour vous
-    if is_admin() and len(tabs) > 7:
+    if is_admin() and len(tabs) >= 8:
         with tabs[7]:
             afficher_panel_admin()
 
