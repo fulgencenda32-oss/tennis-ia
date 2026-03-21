@@ -354,5 +354,24 @@ if CHARGE:
         with tabs[6]:
             afficher_panel_admin()
 
+    # Restaurer onglet actif via JavaScript
+    import streamlit.components.v1 as _components
+    _components.html("""
+    <script>
+    function activerOnglet() {
+        var idx = parseInt(sessionStorage.getItem("tennis_ia_tab") || "0");
+        var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+        if (tabs && tabs[idx]) { tabs[idx].click(); }
+    }
+    var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+    tabs.forEach(function(tab, i) {
+        tab.addEventListener("click", function() {
+            sessionStorage.setItem("tennis_ia_tab", i);
+        });
+    });
+    setTimeout(activerOnglet, 300);
+    </script>
+    """, height=0)
+
 else:
     st.error("❌ Impossible de charger l'application.")
