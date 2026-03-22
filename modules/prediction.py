@@ -545,7 +545,7 @@ def page_prediction(modeles, df_base):
                             st.session_state["joueur_b_auto"] = match["joueur_b"]
                             st.session_state["ignorer_api"] = True
                     with col_no:
-                        if st.button("❌ Ignorer", key=f"ignore_{match['joueur_a']}_{match['joueur_b']}_a1"):
+                        if st.button("❌ Ignorer", key=f"ignore_a_{i}_{match['joueur_a']}_{match['joueur_b']}"):
                             st.session_state["ignorer_api"] = True
                 st.markdown("---")
 
@@ -658,7 +658,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                             st.session_state["joueur_b_auto"] = match["joueur_b"]
                             st.session_state["ignorer_api"] = True
                     with col_no2:
-                        if st.button("Ignorer", key=f"ignore_b_{match['joueur_a']}"):
+                        if st.button("Ignorer", key=f"ignore_b_{i}_{match['joueur_a']}_{match['joueur_b']}"):
                             st.session_state["ignorer_api"] = True
                 st.markdown("---")
 
