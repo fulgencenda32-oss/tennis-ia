@@ -240,7 +240,7 @@ def section_utilisateurs(users):
                         "Date"      : _ts_to_str(p.get("date")),
                         "Joueur A"  : p.get("joueur_a", "—"),
                         "Joueur B"  : p.get("joueur_b", "—"),
-                        "IA prédit" : p.get("prediction", "—"),
+                        "IA predit"  : p.get("vainqueur", "-"),
                         "Surface"   : p.get("surface", "—"),
                     } for p in preds]
                     st.dataframe(pd.DataFrame(rows_p), use_container_width=True, hide_index=True)
@@ -266,9 +266,9 @@ def section_predictions():
         "Date"      : _ts_to_str(p.get("date")),
         "Joueur A"  : p.get("joueur_a", "—"),
         "Joueur B"  : p.get("joueur_b", "—"),
-        "IA prédit" : p.get("prediction", "—"),
-        "Surface"   : p.get("surface", "—"),
-        "Circuit"   : p.get("circuit", "—"),
+        "IA predit" : p.get("vainqueur", "-"),
+        "Proba"     : str(p.get("proba_v", "-")) + "%",
+        "Tournoi"   : p.get("tournoi", "-"),
     } for p in preds]
 
     df_preds = pd.DataFrame(rows)
@@ -276,7 +276,7 @@ def section_predictions():
 
     st.markdown("---")
     st.markdown("**📊 Répartition par surface**")
-    st.bar_chart(df_preds["Surface"].value_counts())
+    st.bar_chart(df_preds["Surface"].value_counts(), height=250)
 
 
 # ============================================================
@@ -322,9 +322,9 @@ def section_export(users):
                     "UID"     : p.get("uid", ""),
                     "JoueurA" : p.get("joueur_a", ""),
                     "JoueurB" : p.get("joueur_b", ""),
-                    "IA"      : p.get("prediction", ""),
+                    "IA"      : p.get("vainqueur", ""),
                     "Surface" : p.get("surface", ""),
-                    "Circuit" : p.get("circuit", ""),
+                    "Tournoi" : p.get("tournoi", ""),
                 } for p in preds]
                 csv_p = pd.DataFrame(rows_p).to_csv(index=False).encode("utf-8")
                 st.download_button(
@@ -395,13 +395,13 @@ def section_stats_ia():
 
     st.metric("Total prédictions analysées", len(preds))
 
-    circuits = pd.Series([p.get("circuit", "Inconnu") for p in preds]).value_counts()
-    st.markdown("**Répartition par circuit**")
-    st.bar_chart(circuits)
+    tournois = pd.Series([p.get("tournoi", "Inconnu") for p in preds]).value_counts().head(10)
+    st.markdown("**Top 10 tournois**")
+    st.bar_chart(tournois, height=250)
 
     surfaces = pd.Series([p.get("surface", "Inconnu") for p in preds]).value_counts()
-    st.markdown("**Répartition par surface**")
-    st.bar_chart(surfaces)
+    st.markdown("**Repartition par surface**")
+    st.bar_chart(surfaces, height=250)
 
     dates_pred = []
     for p in preds:
@@ -416,8 +416,8 @@ def section_stats_ia():
                 pass
     if dates_pred:
         counts = pd.DataFrame({"date": dates_pred}).groupby("date").size().tail(30)
-        st.markdown("**Prédictions par jour (30 derniers jours)**")
-        st.line_chart(counts)
+        st.markdown("**Predictions par jour (30 derniers jours)**")
+        st.line_chart(counts, height=250)
 
 
 # ============================================================

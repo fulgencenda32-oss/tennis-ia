@@ -307,6 +307,35 @@ with col5:
 if not CSV_DISPO:
     st.warning("⚠️ BASE_FEATURES.csv non disponible – certaines fonctionnalités sont limitées.")
 
+
+# ============================================================
+# BROADCAST MESSAGE (Admin -> Utilisateurs)
+# ============================================================
+try:
+    from modules.auth import get_db as _get_db
+    _db = _get_db()
+    _doc = _db.collection("broadcast").document("message_actif").get()
+    if _doc.exists:
+        _msg = _doc.to_dict()
+        if _msg.get("actif", False):
+            _texte = _msg.get("texte", "")
+            _type  = _msg.get("type", "info")
+            _cible = _msg.get("cible", "Tous")
+            _user  = st.session_state.get("user", {})
+            _plan  = _user.get("plan", "gratuit")
+            _show  = (
+                _cible == "Tous" or
+                (_cible == "Gratuit uniquement" and _plan == "gratuit") or
+                (_cible == "Premium uniquement" and _plan == "premium")
+            )
+            if _show and _texte:
+                if _type == "success":   st.success(_texte)
+                elif _type == "warning": st.warning(_texte)
+                elif _type == "error":   st.error(_texte)
+                else:                    st.info(_texte)
+except Exception:
+    pass
+
 st.markdown("---")
 
 # ============================================================
