@@ -919,6 +919,60 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
+            # ── Statistiques comparées ──
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.markdown("**📊 Statistiques comparées**")
+                stats_df = pd.DataFrame({
+                    'Statistique' : [
+                        'ELO général',
+                        f'ELO {surface}',
+                        'Forme récente',
+                        'H2H (victoires)',
+                        'Classement',
+                        'Hot streak',
+                    ],
+                    joueur_a : [
+                        res['elo_a'],
+                        res['elo_a_surf'],
+                        f"{res['forme_a']}%",
+                        res['h2h_a'],
+                        f"#{res['rank_a']}",
+                        f"{res.get('streak_a', 0)} victoires",
+                    ],
+                    joueur_b : [
+                        res['elo_b'],
+                        res['elo_b_surf'],
+                        f"{res['forme_b']}%",
+                        res['h2h_b'],
+                        f"#{res['rank_b']}",
+                        f"{res.get('streak_b', 0)} victoires",
+                    ]
+                })
+                st.dataframe(stats_df, hide_index=True, use_container_width=True)
+
+            with col_d2:
+                st.markdown("**🎯 Probabilités**")
+                fig = go.Figure(go.Bar(
+                    x=[joueur_a, joueur_b],
+                    y=[res['proba_a'], res['proba_b']],
+                    marker_color=['#2d9e56', '#FF5722'],
+                    text=[f"{res['proba_a']}%", f"{res['proba_b']}%"],
+                    textposition='auto',
+                ))
+                fig.update_layout(
+                    yaxis_title="Probabilité (%)",
+                    yaxis_range=[0, 100],
+                    height=300,
+                    margin=dict(t=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white'),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("---")
+
             # ── Over/Under ──
             st.markdown("**📈 Over / Under — Total Jeux**")
 
