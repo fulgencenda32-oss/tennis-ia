@@ -355,6 +355,11 @@ def predire_match(
         'value_bet_info' : value_bet_info,
         'cotes_fournies' : cote_a is not None,
         'date'           : datetime.now().strftime('%Y-%m-%d %H:%M'),
+        # Over/Under sets 2.5 — Modèle IA
+        'ou_sets_proba'  : float(modele_ou_sets.predict_proba(X)[0][1]) if 'modele_ou_sets' in modeles else (1.0 if nb_sets_p > 2 else 0.0),
+        'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if 'modele_ou_sets' in modeles else nb_sets_p > 2,
+        # Over/Under jeux — Modèle IA
+        'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if 'modele_ou_jeux' in modeles else 0,
     }
 
 # ============================================================
@@ -788,6 +793,53 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     "⚖️ Handicap",
                     f"{res['handicap']} set(s)"
                 )
+
+            st.markdown("---")
+
+            # ── Over/Under ──
+            st.markdown("**📈 Over / Under**")
+            col_ou1, col_ou2, col_ou3 = st.columns(3)
+
+            with col_ou1:
+                ou_over = res.get('ou_sets_over', res['nb_sets'] > 2)
+                ou_proba = res.get('ou_sets_proba', 1.0 if ou_over else 0.0)
+                label_sets = "OVER 2.5" if ou_over else "UNDER 2.5"
+                couleur_sets = "🟢" if ou_over else "🔴"
+                st.metric(
+                    "Sets O/U 2.5",
+                    f"{couleur_sets} {label_sets}",
+                    f"Confiance IA : {round(max(ou_proba, 1-ou_proba)*100)}%"
+                )
+
+            with col_ou2:
+                ou_jeux = res.get('ou_jeux_val', 0)
+                if ou_jeux > 0:
+                    label_jeux = f"OVER 22.5" if ou_jeux > 22 else "UNDER 22.5"
+                    couleur_jeux = "🟢" if ou_jeux > 22 else "🔴"
+                    st.metric(
+                        "Jeux O/U 22.5",
+                        f"{couleur_jeux} {label_jeux}",
+                        f"{ou_jeux} jeux prédits par IA"
+                    )
+                else:
+                    st.metric("Jeux O/U 22.5", "—", "Modèle en cours d'entraînement")
+
+            with col_ou3:
+                if ou_jeux > 0:
+                    seuil_custom = st.number_input(
+                        "Seuil personnalisé (jeux)",
+                        min_value=15, max_value=45, value=22, step=1,
+                        key="ou_custom"
+                    )
+                    label_custom = f"OVER {seuil_custom}.5" if ou_jeux > seuil_custom else f"UNDER {seuil_custom}.5"
+                    couleur_custom = "🟢" if ou_jeux > seuil_custom else "🔴"
+                    st.metric(
+                        f"Jeux O/U {seuil_custom}.5",
+                        f"{couleur_custom} {label_custom}",
+                        f"{ou_jeux} jeux prédits"
+                    )
+                else:
+                    st.metric("Seuil personnalisé", "—", "Disponible après réentraînement")
 
             st.markdown("---")
 
