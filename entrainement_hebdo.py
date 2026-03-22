@@ -235,7 +235,14 @@ if nb_nouveaux > 0:
     modeles['forme_final'] = {
         j: sum(v)/len(v) for j, v in forme_hist.items() if v
     }
-    print("   ✅ ELO et forme mis à jour !")
+    # Mise à jour hot streak incremental
+    streak_incr = defaultdict(int, modeles.get('streak_final', {}))
+    for _, row in df_new.iterrows():
+        w, l = str(row['winner_name']), str(row['loser_name'])
+        streak_incr[w] += 1
+        streak_incr[l]  = 0
+    modeles['streak_final'] = dict(streak_incr)
+    print("   ✅ ELO, forme et hot streak mis à jour !")
 
 # ============================================================
 # ÉTAPE 7 — AFFINAGE RAPIDE DES MODÈLES (nouveaux matchs)
@@ -268,6 +275,7 @@ if nb_nouveaux > 0:
                 'forme_diff'    : modeles['forme_final'].get(w, 0.5) - modeles['forme_final'].get(l, 0.5),
                 'h2h_diff'      : 0.0,
                 'fatigue_diff'  : 0.0,
+                'streak_diff'   : float(modeles.get('streak_final', {}).get(w, 0)) - float(modeles.get('streak_final', {}).get(l, 0)),
                 'rank_diff'     : float(str(row.get('loser_rank', 500) or 500)) - float(str(row.get('winner_rank', 500) or 500)),
                 'age_diff'      : 0.0,
                 'surface_enc'   : surface_map.get(surf, 4),
@@ -284,7 +292,7 @@ if nb_nouveaux > 0:
     # Dataset symétrique nouveaux matchs
     X_new  = preparer_features(df_new)
     X_newB = X_new.copy()
-    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','rank_diff','age_diff','cote_diff']:
+    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','rank_diff','age_diff','cote_diff']:
         X_newB[col] = -X_new[col]
 
     X_affinage = pd.concat([X_new, X_newB], ignore_index=True)
@@ -395,6 +403,22 @@ df['fatigue_winner'] = np.array(fw3, dtype='float32')
 df['fatigue_loser']  = np.array(fl3, dtype='float32')
 df['fatigue_diff']   = (df['fatigue_winner'] - df['fatigue_loser']).astype('float32')
 
+# Hot streak — victoires consecutives avant chaque match
+print("   Calcul hot streak...")
+streak_joueur = defaultdict(int)
+streak_w_list, streak_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    streak_w_list.append(streak_joueur[w])
+    streak_l_list.append(streak_joueur[l])
+    streak_joueur[w] += 1   # vainqueur continue sa serie
+    streak_joueur[l]  = 0   # perdant repart a zero
+df['streak_winner'] = np.array(streak_w_list, dtype='float32')
+df['streak_loser']  = np.array(streak_l_list, dtype='float32')
+df['streak_diff']   = (df['streak_winner'] - df['streak_loser']).astype('float32')
+streak_final = dict(streak_joueur)
+print(f"   Hot streak calcule — {len(streak_final):,} joueurs")
+
 def safe_float(val, defaut=500.0):
     try:
         f = float(str(val)); return defaut if np.isnan(f) else f
@@ -422,12 +446,12 @@ df['cote_diff']    = 0.0; df['cote_proba_A'] = 0.5; df['cote_proba_B'] = 0.5
 if 'best_of' not in df.columns: df['best_of'] = 3
 df['best_of'] = pd.to_numeric(df['best_of'], errors='coerce').fillna(3).astype(int)
 
-FEATURES = ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','rank_diff','age_diff','surface_enc','circuit_enc','genre_enc','best_of','round_num','cote_diff','cote_proba_A','cote_proba_B']
+FEATURES = ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','rank_diff','age_diff','surface_enc','circuit_enc','genre_enc','best_of','round_num','cote_diff','cote_proba_A','cote_proba_B']
 
 df_clean = df.dropna(subset=['elo_diff','forme_diff']).copy()
 df_A = df_clean.copy(); df_A['target'] = 1
 df_B = df_clean.copy(); df_B['target'] = 0
-for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','rank_diff','age_diff','cote_diff']:
+for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','rank_diff','age_diff','cote_diff']:
     df_B[col] = -df_clean[col].fillna(0).values
 df_B['cote_proba_A'] = df_clean['cote_proba_B'].values
 df_B['cote_proba_B'] = df_clean['cote_proba_A'].values
@@ -524,7 +548,7 @@ modeles_complets = {
     'modele_jeux': modele_jeux,
     'features': FEATURES, 'simplifier_round': simplifier_round,
     'dico_scores': dico_scores, 'dico_scores_surf': dico_scores_surf,
-    'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final,
+    'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final, 'streak_final': streak_final,
     'surface_map': surface_map, 'circuit_map': circuit_map,
     'acc_win': acc_win, 'acc_sets': acc_sets, 'acc_handi': acc_handi,
     'mae_jeux': mae_jeux, 'std_jeux': std_jeux, 'std_globale_jeux': std_globale_jeux,

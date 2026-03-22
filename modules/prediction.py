@@ -160,6 +160,7 @@ def predire_match(
     elo_final        = modeles['elo_final']
     elo_surf         = modeles['elo_final_surf']
     forme_final      = modeles['forme_final']
+    streak_final     = modeles.get('streak_final', {})
     dico_scores      = modeles['dico_scores']
     dico_scores_surf = modeles['dico_scores_surf']
     surface_map      = modeles['surface_map']
@@ -215,6 +216,10 @@ def predire_match(
     forme_a = forme_final.get(joueur_a, 0.5)
     forme_b = forme_final.get(joueur_b, 0.5)
 
+    # Hot streak
+    streak_a = float(streak_final.get(joueur_a, 0))
+    streak_b = float(streak_final.get(joueur_b, 0))
+
     # H2H
     if df_base is not None:
         mask_h2h = (
@@ -260,6 +265,7 @@ def predire_match(
         'forme_diff'    : forme_a - forme_b,
         'h2h_diff'      : h2h_a - h2h_b,
         'fatigue_diff'  : 0.0,
+        'streak_diff'   : streak_a - streak_b,
         'rank_diff'     : rank_b - rank_a,
         'age_diff'      : 0.0,
         'surface_enc'   : surf_enc,
@@ -346,6 +352,8 @@ def predire_match(
         'elo_b_surf'     : round(elo_b_surf),
         'forme_a'        : round(forme_a * 100, 1),
         'forme_b'        : round(forme_b * 100, 1),
+        'streak_a'       : int(streak_a),
+        'streak_b'       : int(streak_b),
         'h2h_a'          : wins_a,
         'h2h_b'          : total_h2h - wins_a,
         'rank_a'         : safe_int(rank_a),
