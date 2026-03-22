@@ -332,4 +332,5 @@ def page_matchs_jour(modeles, df_base):
                         else:
                             st.success(f"Vainqueur : {data['res']['vainqueur']} ({data['res']['proba_v']}%) | Score : {data['res']['score_exact']} | Sets : {data['res']['nb_sets']}")
                             afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], detecter_surface(data.get("tournoi", "")))
+                        st.info("💡 Pour une prediction plus precise, utilisez l'onglet Prediction avec toutes les donnees : surface exacte, round, format et cotes du match.")
                     st.divider()
