@@ -468,10 +468,10 @@ def page_prediction(modeles, df_base):
                             if n not in [j for j, _ in suggestions_a]:
                                 suggestions_a.append((n, 75))
                 if suggestions_a:
-                options_a = [
-                    f"{j} (similarite {s:.0f}%)"
-                    for j, s in suggestions_a
-                ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
+                    options_a = [
+                        f"{j} (similarite {s:.0f}%)"
+                        for j, s in suggestions_a
+                    ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
                 choix_a  = st.selectbox(
                     "Selectionne le joueur A",
                     options_a, key="choix_a"
