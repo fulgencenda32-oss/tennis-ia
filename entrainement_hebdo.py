@@ -235,14 +235,7 @@ if nb_nouveaux > 0:
     modeles['forme_final'] = {
         j: sum(v)/len(v) for j, v in forme_hist.items() if v
     }
-    # Mise à jour hot streak incremental
-    streak_incr = defaultdict(int, modeles.get('streak_final', {}))
-    for _, row in df_new.iterrows():
-        w, l = str(row['winner_name']), str(row['loser_name'])
-        streak_incr[w] += 1
-        streak_incr[l]  = 0
-    modeles['streak_final'] = dict(streak_incr)
-    print("   ✅ ELO, forme et hot streak mis à jour !")
+    print("   ✅ ELO et forme mis à jour !")
 
 # ============================================================
 # ÉTAPE 7 — AFFINAGE RAPIDE DES MODÈLES (nouveaux matchs)
@@ -275,7 +268,13 @@ if nb_nouveaux > 0:
                 'forme_diff'    : modeles['forme_final'].get(w, 0.5) - modeles['forme_final'].get(l, 0.5),
                 'h2h_diff'      : 0.0,
                 'fatigue_diff'  : 0.0,
-                'streak_diff'   : float(modeles.get('streak_final', {}).get(w, 0)) - float(modeles.get('streak_final', {}).get(l, 0)),
+                'streak_diff'      : float(modeles.get('streak_final', {}).get(w, 0)) - float(modeles.get('streak_final', {}).get(l, 0)),
+                'comeback_diff'    : float(modeles.get('comeback_final', {}).get(w, 0.3)) - float(modeles.get('comeback_final', {}).get(l, 0.3)),
+                'clutch_diff'      : float(modeles.get('clutch_final', {}).get(w, 0.5)) - float(modeles.get('clutch_final', {}).get(l, 0.5)),
+                'bigmatch_diff'    : float(modeles.get('bigmatch_final', {}).get(w, 0.5)) - float(modeles.get('bigmatch_final', {}).get(l, 0.5)),
+                'dominance_diff'   : float(modeles.get('dominance_final', {}).get(w, 0.0)) - float(modeles.get('dominance_final', {}).get(l, 0.0)),
+                'revanche_diff'    : 0.0,
+                'hist_tournoi_diff': 0.0,
                 'rank_diff'     : float(str(row.get('loser_rank', 500) or 500)) - float(str(row.get('winner_rank', 500) or 500)),
                 'age_diff'      : 0.0,
                 'surface_enc'   : surface_map.get(surf, 4),
@@ -292,7 +291,7 @@ if nb_nouveaux > 0:
     # Dataset symétrique nouveaux matchs
     X_new  = preparer_features(df_new)
     X_newB = X_new.copy()
-    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','rank_diff','age_diff','cote_diff']:
+    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','comeback_diff','clutch_diff','bigmatch_diff','dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff','age_diff','cote_diff']:
         X_newB[col] = -X_new[col]
 
     X_affinage = pd.concat([X_new, X_newB], ignore_index=True)
@@ -403,7 +402,7 @@ df['fatigue_winner'] = np.array(fw3, dtype='float32')
 df['fatigue_loser']  = np.array(fl3, dtype='float32')
 df['fatigue_diff']   = (df['fatigue_winner'] - df['fatigue_loser']).astype('float32')
 
-# Hot streak — victoires consecutives avant chaque match
+# ── Hot streak ──
 print("   Calcul hot streak...")
 streak_joueur = defaultdict(int)
 streak_w_list, streak_l_list = [], []
@@ -411,13 +410,146 @@ for _, row in df.iterrows():
     w, l = str(row['winner_name']), str(row['loser_name'])
     streak_w_list.append(streak_joueur[w])
     streak_l_list.append(streak_joueur[l])
-    streak_joueur[w] += 1   # vainqueur continue sa serie
-    streak_joueur[l]  = 0   # perdant repart a zero
+    streak_joueur[w] += 1
+    streak_joueur[l]  = 0
 df['streak_winner'] = np.array(streak_w_list, dtype='float32')
 df['streak_loser']  = np.array(streak_l_list, dtype='float32')
 df['streak_diff']   = (df['streak_winner'] - df['streak_loser']).astype('float32')
 streak_final = dict(streak_joueur)
-print(f"   Hot streak calcule — {len(streak_final):,} joueurs")
+
+# ── Comeback ratio ──
+print("   Calcul comeback ratio...")
+def parser_sets_scores(s):
+    if not isinstance(s, str): return [], []
+    sets = re.findall(r'(\d+)-(\d+)', s)
+    return [(int(a), int(b)) for a, b in sets]
+
+comeback_w = defaultdict(lambda: [0, 0])  # [comebacks, opportunites]
+comeback_l = defaultdict(lambda: [0, 0])
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    sets = parser_sets_scores(str(row.get('score', '')))
+    if len(sets) >= 2:
+        premier_set_w = sets[0][0] > sets[0][1]
+        if not premier_set_w:  # w a perdu le 1er set
+            comeback_w[w][1] += 1
+            comeback_w[w][0] += 1  # il a gagné le match quand même
+        if sets[0][0] > sets[0][1]:  # l a perdu le 1er set
+            comeback_l[l][1] += 1
+            # l n'a pas gagné
+comeback_final = {}
+for j in set(list(comeback_w.keys()) + list(comeback_l.keys())):
+    wins = comeback_w[j][0]
+    opp = comeback_w[j][1] + comeback_l[j][1]
+    comeback_final[j] = round(wins / opp, 3) if opp > 0 else 0.3
+
+comeback_w_list, comeback_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    comeback_w_list.append(comeback_final.get(w, 0.3))
+    comeback_l_list.append(comeback_final.get(l, 0.3))
+df['comeback_winner'] = np.array(comeback_w_list, dtype='float32')
+df['comeback_loser']  = np.array(comeback_l_list, dtype='float32')
+df['comeback_diff']   = (df['comeback_winner'] - df['comeback_loser']).astype('float32')
+
+# ── Clutch score (victoires en 3 sets) ──
+print("   Calcul clutch score...")
+clutch_w = defaultdict(lambda: [0, 0])  # [victoires serrées, total matchs serrés]
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    nb = row.get('nb_sets', 2)
+    try: nb = int(nb)
+    except: nb = 2
+    if nb >= 3:
+        clutch_w[w][0] += 1; clutch_w[w][1] += 1
+        clutch_w[l][1] += 1
+clutch_final = {j: round(v[0]/v[1], 3) if v[1] > 0 else 0.5 for j, v in clutch_w.items()}
+
+clutch_w_list, clutch_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    clutch_w_list.append(clutch_final.get(w, 0.5))
+    clutch_l_list.append(clutch_final.get(l, 0.5))
+df['clutch_winner'] = np.array(clutch_w_list, dtype='float32')
+df['clutch_loser']  = np.array(clutch_l_list, dtype='float32')
+df['clutch_diff']   = (df['clutch_winner'] - df['clutch_loser']).astype('float32')
+
+# ── Big match player (perf en finale vs 1er tour) ──
+print("   Calcul big match player...")
+bigmatch_w = defaultdict(lambda: [0, 0])  # [victoires finales, total finales]
+bigmatch_l = defaultdict(lambda: [0, 0])
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    rnd = str(row.get('round', '')).upper()
+    if 'FINAL' in rnd or rnd == 'F':
+        bigmatch_w[w][0] += 1; bigmatch_w[w][1] += 1
+        bigmatch_l[l][1] += 1
+bigmatch_final = {}
+for j in set(list(bigmatch_w.keys()) + list(bigmatch_l.keys())):
+    total = bigmatch_w[j][1] + bigmatch_l[j][1]
+    wins  = bigmatch_w[j][0]
+    bigmatch_final[j] = round(wins / total, 3) if total > 0 else 0.5
+
+bigmatch_w_list, bigmatch_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    bigmatch_w_list.append(bigmatch_final.get(w, 0.5))
+    bigmatch_l_list.append(bigmatch_final.get(l, 0.5))
+df['bigmatch_winner'] = np.array(bigmatch_w_list, dtype='float32')
+df['bigmatch_loser']  = np.array(bigmatch_l_list, dtype='float32')
+df['bigmatch_diff']   = (df['bigmatch_winner'] - df['bigmatch_loser']).astype('float32')
+
+# ── Dominance score (bagels 6-0 donnés) ──
+print("   Calcul dominance score...")
+dominance_w = defaultdict(lambda: [0, 0])  # [bagels donnes, matchs joues]
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    sets = parser_sets_scores(str(row.get('score', '')))
+    dominance_w[w][1] += 1
+    for a, b in sets:
+        if a == 6 and b == 0: dominance_w[w][0] += 1
+dominance_final = {j: round(v[0]/v[1], 3) if v[1] > 0 else 0.0 for j, v in dominance_w.items()}
+
+dom_w_list, dom_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    dom_w_list.append(dominance_final.get(w, 0.0))
+    dom_l_list.append(dominance_final.get(l, 0.0))
+df['dominance_winner'] = np.array(dom_w_list, dtype='float32')
+df['dominance_loser']  = np.array(dom_l_list, dtype='float32')
+df['dominance_diff']   = (df['dominance_winner'] - df['dominance_loser']).astype('float32')
+
+# ── Revanche factor (défaite récente contre cet adversaire) ──
+print("   Calcul revanche factor...")
+last_result = {}  # (joueur, adversaire) -> 1 si victoire, 0 si défaite
+revanche_w_list, revanche_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    revanche_w_list.append(1 - last_result.get((w, l), 0.5))  # 1 si revanche
+    revanche_l_list.append(1 - last_result.get((l, w), 0.5))
+    last_result[(w, l)] = 1
+    last_result[(l, w)] = 0
+df['revanche_winner'] = np.array(revanche_w_list, dtype='float32')
+df['revanche_loser']  = np.array(revanche_l_list, dtype='float32')
+df['revanche_diff']   = (df['revanche_winner'] - df['revanche_loser']).astype('float32')
+
+# ── Historique tournoi ──
+print("   Calcul historique tournoi...")
+tournoi_hist = defaultdict(lambda: defaultdict(lambda: [0, 0]))  # joueur -> tournoi -> [wins, total]
+hist_w_list, hist_l_list = [], []
+for _, row in df.iterrows():
+    w, l = str(row['winner_name']), str(row['loser_name'])
+    t = str(row.get('tourney_name', '')).lower()[:30]
+    hist_w_list.append(tournoi_hist[w][t][0] / tournoi_hist[w][t][1] if tournoi_hist[w][t][1] > 0 else 0.5)
+    hist_l_list.append(tournoi_hist[l][t][0] / tournoi_hist[l][t][1] if tournoi_hist[l][t][1] > 0 else 0.5)
+    tournoi_hist[w][t][0] += 1; tournoi_hist[w][t][1] += 1
+    tournoi_hist[l][t][1] += 1
+tournoi_hist_final = {j: {t: round(v[0]/v[1], 3) for t, v in td.items() if v[1] > 0} for j, td in tournoi_hist.items()}
+df['hist_tournoi_winner'] = np.array(hist_w_list, dtype='float32')
+df['hist_tournoi_loser']  = np.array(hist_l_list, dtype='float32')
+df['hist_tournoi_diff']   = (df['hist_tournoi_winner'] - df['hist_tournoi_loser']).astype('float32')
+
+print(f"   ✅ Toutes les nouvelles variables calculées !")
 
 def safe_float(val, defaut=500.0):
     try:
@@ -446,12 +578,12 @@ df['cote_diff']    = 0.0; df['cote_proba_A'] = 0.5; df['cote_proba_B'] = 0.5
 if 'best_of' not in df.columns: df['best_of'] = 3
 df['best_of'] = pd.to_numeric(df['best_of'], errors='coerce').fillna(3).astype(int)
 
-FEATURES = ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','rank_diff','age_diff','surface_enc','circuit_enc','genre_enc','best_of','round_num','cote_diff','cote_proba_A','cote_proba_B']
+FEATURES = ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','comeback_diff','clutch_diff','bigmatch_diff','dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff','age_diff','surface_enc','circuit_enc','genre_enc','best_of','round_num','cote_diff','cote_proba_A','cote_proba_B']
 
 df_clean = df.dropna(subset=['elo_diff','forme_diff']).copy()
 df_A = df_clean.copy(); df_A['target'] = 1
 df_B = df_clean.copy(); df_B['target'] = 0
-for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','rank_diff','age_diff','cote_diff']:
+for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','comeback_diff','clutch_diff','bigmatch_diff','dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff','age_diff','cote_diff']:
     df_B[col] = -df_clean[col].fillna(0).values
 df_B['cote_proba_A'] = df_clean['cote_proba_B'].values
 df_B['cote_proba_B'] = df_clean['cote_proba_A'].values
@@ -533,6 +665,13 @@ for (nb, handi, surf), grp in df_clean.groupby(['nb_sets','handicap_sets','surfa
         dico_scores_surf[(int(nb), int(handi), str(surf))] = top[0][0]
 
 elo_final      = df_clean.groupby('winner_name')['elo_winner'].last().to_dict()
+
+# IOC (nationalité) — dernier code pays connu par joueur
+if 'winner_ioc' in df_clean.columns:
+    ioc_final = df_clean[df_clean['winner_ioc'].notna()].groupby('winner_name')['winner_ioc'].last().to_dict()
+else:
+    ioc_final = {}
+print(f"   ✅ {len(ioc_final):,} nationalités joueurs chargées")
 elo_final_surf = {}
 for surf in ['Hard','Clay','Grass','Carpet']:
     mask = df_clean['surface'] == surf
@@ -548,7 +687,7 @@ modeles_complets = {
     'modele_jeux': modele_jeux,
     'features': FEATURES, 'simplifier_round': simplifier_round,
     'dico_scores': dico_scores, 'dico_scores_surf': dico_scores_surf,
-    'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final, 'streak_final': streak_final,
+    'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final, 'streak_final': streak_final, 'ioc_final': ioc_final, 'comeback_final': comeback_final, 'clutch_final': clutch_final, 'bigmatch_final': bigmatch_final, 'dominance_final': dominance_final, 'tournoi_hist_final': tournoi_hist_final,
     'surface_map': surface_map, 'circuit_map': circuit_map,
     'acc_win': acc_win, 'acc_sets': acc_sets, 'acc_handi': acc_handi,
     'mae_jeux': mae_jeux, 'std_jeux': std_jeux, 'std_globale_jeux': std_globale_jeux,

@@ -50,6 +50,67 @@ import random
 import plotly.graph_objects as go
 
 # ============================================================
+# DICTIONNAIRE PAYS — Tournoi → Code IOC
+# ============================================================
+PAYS_TOURNOI = {
+    # Grand Chelem
+    'australian open': 'AUS', 'roland garros': 'FRA', 'french open': 'FRA',
+    'wimbledon': 'GBR', 'us open': 'USA',
+    # Masters 1000 / WTA 1000
+    'indian wells': 'USA', 'miami': 'USA', 'monte carlo': 'MON',
+    'madrid': 'ESP', 'rome': 'ITA', 'canadian open': 'CAN',
+    'toronto': 'CAN', 'montreal': 'CAN', 'cincinnati': 'USA',
+    'shanghai': 'CHN', 'paris': 'FRA', 'bercy': 'FRA',
+    'london': 'GBR', 'vienna': 'AUT', 'basel': 'SUI',
+    'rotterdam': 'NED', 'dubai': 'UAE', 'doha': 'QAT',
+    'barcelona': 'ESP', 'hamburg': 'GER', 'munich': 'GER',
+    'stuttgart': 'GER', 'halle': 'GER', 'queens': 'GBR',
+    'eastbourne': 'GBR', 'washington': 'USA', 'los angeles': 'USA',
+    'san diego': 'USA', 'winston-salem': 'USA', 'new york': 'USA',
+    'buenos aires': 'ARG', 'rio': 'BRA', 'sao paulo': 'BRA',
+    'santiago': 'CHI', 'bogota': 'COL', 'acapulco': 'MEX',
+    'mexico': 'MEX', 'marrakech': 'MAR', 'casablanca': 'MAR',
+    'moscow': 'RUS', 'saint-petersbourg': 'RUS', 'melbourne': 'AUS',
+    'sydney': 'AUS', 'brisbane': 'AUS', 'seoul': 'KOR',
+    'tokyo': 'JPN', 'osaka': 'JPN', 'beijing': 'CHN',
+    'wuhan': 'CHN', 'shenzhen': 'CHN', 'prague': 'CZE',
+    'budapest': 'HUN', 'bucharest': 'ROU', 'istanbul': 'TUR',
+    'athens': 'GRE', 'sofia': 'BUL', 'belgrade': 'SRB',
+    'zagreb': 'CRO', 'geneva': 'SUI', 'lausanne': 'SUI',
+    'umag': 'CRO', 'kitzbuhel': 'AUT', 'gstaad': 'SUI',
+}
+
+# Pays voisins / culturellement proches (bonus réduit)
+PAYS_VOISINS = {
+    'FRA': ['MON', 'BEL', 'SUI'], 'ESP': ['POR', 'MON'],
+    'GER': ['AUT', 'SUI'], 'SUI': ['AUT', 'GER', 'FRA'],
+    'USA': ['CAN', 'MEX'], 'AUS': ['NZL'],
+    'ARG': ['CHI', 'URU', 'BRA'], 'SRB': ['CRO', 'BIH'],
+}
+
+def detecter_domicile(joueur_ioc, tournoi_nom):
+    """
+    Retourne le bonus domicile :
+    +2 = domicile direct, +1 = pays voisin, 0 = neutre
+    """
+    if not joueur_ioc or not tournoi_nom:
+        return 0
+    tournoi_lower = tournoi_nom.lower()
+    pays_match = None
+    for mot_cle, pays in PAYS_TOURNOI.items():
+        if mot_cle in tournoi_lower:
+            pays_match = pays
+            break
+    if not pays_match:
+        return 0
+    if joueur_ioc == pays_match:
+        return 2
+    voisins = PAYS_VOISINS.get(joueur_ioc, [])
+    if pays_match in voisins:
+        return 1
+    return 0
+
+# ============================================================
 # CONVERSION SÉCURISÉE
 # ============================================================
 def safe_int(val, defaut=500):
@@ -161,6 +222,12 @@ def predire_match(
     elo_surf         = modeles['elo_final_surf']
     forme_final      = modeles['forme_final']
     streak_final     = modeles.get('streak_final', {})
+    ioc_final        = modeles.get('ioc_final', {})
+    comeback_final   = modeles.get('comeback_final', {})
+    clutch_final     = modeles.get('clutch_final', {})
+    bigmatch_final   = modeles.get('bigmatch_final', {})
+    dominance_final  = modeles.get('dominance_final', {})
+    tournoi_hist_fin = modeles.get('tournoi_hist_final', {})
     dico_scores      = modeles['dico_scores']
     dico_scores_surf = modeles['dico_scores_surf']
     surface_map      = modeles['surface_map']
@@ -220,6 +287,29 @@ def predire_match(
     streak_a = float(streak_final.get(joueur_a, 0))
     streak_b = float(streak_final.get(joueur_b, 0))
 
+    # Tournoi domicile
+    ioc_a      = ioc_final.get(joueur_a, '')
+    ioc_b      = ioc_final.get(joueur_b, '')
+    domicile_a = detecter_domicile(ioc_a, tournoi)
+    domicile_b = detecter_domicile(ioc_b, tournoi)
+
+    # Nouvelles variables psychologiques
+    comeback_a   = float(comeback_final.get(joueur_a, 0.3))
+    comeback_b   = float(comeback_final.get(joueur_b, 0.3))
+    clutch_a     = float(clutch_final.get(joueur_a, 0.5))
+    clutch_b     = float(clutch_final.get(joueur_b, 0.5))
+    bigmatch_a   = float(bigmatch_final.get(joueur_a, 0.5))
+    bigmatch_b   = float(bigmatch_final.get(joueur_b, 0.5))
+    dominance_a  = float(dominance_final.get(joueur_a, 0.0))
+    dominance_b  = float(dominance_final.get(joueur_b, 0.0))
+    # Historique sur ce tournoi
+    t_key = tournoi.lower()[:30]
+    hist_t_a = float(tournoi_hist_fin.get(joueur_a, {}).get(t_key, 0.5))
+    hist_t_b = float(tournoi_hist_fin.get(joueur_b, {}).get(t_key, 0.5))
+    # Revanche factor (défaite récente contre cet adversaire)
+    revanche_a = 1.0  # neutre par défaut
+    revanche_b = 1.0
+
     # H2H
     if df_base is not None:
         mask_h2h = (
@@ -265,7 +355,13 @@ def predire_match(
         'forme_diff'    : forme_a - forme_b,
         'h2h_diff'      : h2h_a - h2h_b,
         'fatigue_diff'  : 0.0,
-        'streak_diff'   : streak_a - streak_b,
+        'streak_diff'      : streak_a - streak_b,
+        'comeback_diff'    : comeback_a - comeback_b,
+        'clutch_diff'      : clutch_a - clutch_b,
+        'bigmatch_diff'    : bigmatch_a - bigmatch_b,
+        'dominance_diff'   : dominance_a - dominance_b,
+        'revanche_diff'    : revanche_a - revanche_b,
+        'hist_tournoi_diff': hist_t_a - hist_t_b,
         'rank_diff'     : rank_b - rank_a,
         'age_diff'      : 0.0,
         'surface_enc'   : surf_enc,
@@ -313,8 +409,14 @@ def predire_match(
     else:
         score_exact = random.choice(scores_5sets)
 
-    vainqueur = joueur_a if proba_a >= 0.5 else joueur_b
-    proba_v   = proba_a  if proba_a >= 0.5 else 1 - proba_a
+    # Ajustement domicile
+    bonus_a = domicile_a * 0.02   # +2% ou +4%
+    bonus_b = domicile_b * 0.02
+    proba_a_adj = min(0.97, max(0.03, proba_a + bonus_a - bonus_b))
+
+    vainqueur = joueur_a if proba_a_adj >= 0.5 else joueur_b
+    proba_v   = proba_a_adj if proba_a_adj >= 0.5 else 1 - proba_a_adj
+    proba_a   = proba_a_adj
 
     # Value bet — verifier les deux joueurs independamment
     value_bet_info = []
@@ -354,6 +456,20 @@ def predire_match(
         'forme_b'        : round(forme_b * 100, 1),
         'streak_a'       : int(streak_a),
         'streak_b'       : int(streak_b),
+        'comeback_a'     : round(comeback_a * 100, 1),
+        'comeback_b'     : round(comeback_b * 100, 1),
+        'clutch_a'       : round(clutch_a * 100, 1),
+        'clutch_b'       : round(clutch_b * 100, 1),
+        'bigmatch_a'     : round(bigmatch_a * 100, 1),
+        'bigmatch_b'     : round(bigmatch_b * 100, 1),
+        'dominance_a'    : round(dominance_a * 100, 1),
+        'dominance_b'    : round(dominance_b * 100, 1),
+        'hist_tournoi_a' : round(hist_t_a * 100, 1),
+        'hist_tournoi_b' : round(hist_t_b * 100, 1),
+        'domicile_a'     : domicile_a,
+        'domicile_b'     : domicile_b,
+        'ioc_a'          : ioc_a,
+        'ioc_b'          : ioc_b,
         'h2h_a'          : wins_a,
         'h2h_b'          : total_h2h - wins_a,
         'rank_a'         : safe_int(rank_a),
@@ -928,9 +1044,15 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         'ELO général',
                         f'ELO {surface}',
                         'Forme récente',
-                        'H2H (victoires)',
+                        'H2H',
                         'Classement',
                         'Hot streak',
+                        'Comeback',
+                        'Clutch',
+                        'Big match',
+                        'Dominance',
+                        'Historique tournoi',
+                        'Domicile',
                     ],
                     joueur_a : [
                         res['elo_a'],
@@ -939,6 +1061,12 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         res['h2h_a'],
                         f"#{res['rank_a']}",
                         f"{res.get('streak_a', 0)} victoires",
+                        f"{res.get('comeback_a', 30)}%",
+                        f"{res.get('clutch_a', 50)}%",
+                        f"{res.get('bigmatch_a', 50)}%",
+                        f"{res.get('dominance_a', 0)}%",
+                        f"{res.get('hist_tournoi_a', 50)}%",
+                        '🏠 Domicile' if res.get('domicile_a') == 2 else ('🌍 Voisin' if res.get('domicile_a') == 1 else '✈️ Extérieur'),
                     ],
                     joueur_b : [
                         res['elo_b'],
@@ -947,6 +1075,12 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         res['h2h_b'],
                         f"#{res['rank_b']}",
                         f"{res.get('streak_b', 0)} victoires",
+                        f"{res.get('comeback_b', 30)}%",
+                        f"{res.get('clutch_b', 50)}%",
+                        f"{res.get('bigmatch_b', 50)}%",
+                        f"{res.get('dominance_b', 0)}%",
+                        f"{res.get('hist_tournoi_b', 50)}%",
+                        '🏠 Domicile' if res.get('domicile_b') == 2 else ('🌍 Voisin' if res.get('domicile_b') == 1 else '✈️ Extérieur'),
                     ]
                 })
                 st.dataframe(stats_df, hide_index=True, use_container_width=True)
