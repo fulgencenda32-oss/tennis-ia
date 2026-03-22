@@ -77,18 +77,67 @@ def safe_float(val, defaut=500.0):
 # ============================================================
 # RECHERCHE FLOUE
 # ============================================================
+def get_api_key():
+    import os
+    cles = [
+        os.getenv("ALLSPORTS_API_KEY"),
+        os.getenv("ALLSPORTS_API_KEY_2"),
+        os.getenv("ALLSPORTS_API_KEY_3"),
+    ]
+    return [c for c in cles if c]
+
 def recherche_floue(nom, liste_joueurs, limite=5, seuil=55):
     if not nom or len(nom) < 2:
         return []
-    resultats = process.extract(
-        nom, liste_joueurs,
-        scorer=fuzz.WRatio, limit=limite,
-    )
-    return [
-        (joueur, score)
-        for joueur, score, _ in resultats
-        if score >= seuil
-    ]
+    # Recherche directe
+    resultats = process.extract(nom, liste_joueurs, scorer=fuzz.WRatio, limit=limite)
+    bons = [(j, s) for j, s, _ in resultats if s >= seuil]
+    # Si pas assez de resultats, chercher par nom de famille
+    if len(bons) < 3:
+        mots = nom.strip().split()
+        for mot in mots:
+            if len(mot) > 3:
+                extras = process.extract(mot, liste_joueurs, scorer=fuzz.WRatio, limit=limite)
+                for j, s, _ in extras:
+                    if s >= seuil and j not in [b[0] for b in bons]:
+                        bons.append((j, min(s, 85)))
+    return sorted(bons, key=lambda x: x[1], reverse=True)[:limite]
+
+def recherche_api_joueur(nom):
+    cles = get_api_key()
+    if not cles:
+        return []
+    cache_key = f"api_search_{nom.lower().strip()}"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+    import requests
+    from datetime import datetime, timedelta
+    date_fin = datetime.now().strftime("%Y-%m-%d")
+    date_debut = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+    for cle in cles:
+        try:
+            r = requests.get("https://apiv2.allsportsapi.com/tennis/", params={
+                "met": "Fixtures", "APIkey": cle,
+                "from": date_debut, "to": date_fin,
+            }, timeout=8)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("success") == 1:
+                    matchs = data.get("result", [])
+                    noms_trouves = []
+                    mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
+                    for m in matchs:
+                        p1 = str(m.get("event_first_player", ""))
+                        p2 = str(m.get("event_second_player", ""))
+                        for p in [p1, p2]:
+                            if "/" not in p and any(mot in p.lower() for mot in mots):
+                                if p not in noms_trouves:
+                                    noms_trouves.append(p)
+                    st.session_state[cache_key] = noms_trouves[:5]
+                    return noms_trouves[:5]
+        except:
+            continue
+    return []
 
 # ============================================================
 # PRÉDICTION
@@ -317,6 +366,15 @@ def page_prediction(modeles, df_base):
 
     liste_joueurs = list(modeles['elo_final'].keys())
 
+    # Suggestion de match depuis API
+    if "suggestion_match" not in st.session_state:
+        st.session_state["suggestion_match"] = None
+    if "api_joueurs_a" not in st.session_state:
+        st.session_state["api_joueurs_a"] = []
+    if "api_joueurs_b" not in st.session_state:
+        st.session_state["api_joueurs_b"] = []
+
+
     # ── Colonnes joueurs ──
     col1, col2 = st.columns(2)
 
@@ -330,13 +388,26 @@ def page_prediction(modeles, df_base):
         joueur_a = None
         if nom_a:
             suggestions_a = recherche_floue(nom_a, liste_joueurs)
+            # Enrichir avec API si peu de resultats
+            if len(suggestions_a) < 3 and len(nom_a) >= 3:
+                if st.button("🔍 Chercher aussi via API", key="btn_api_search_a"):
+                    with st.spinner("Recherche API..."):
+                        noms_api = recherche_api_joueur(nom_a)
+                    if noms_api:
+                        st.session_state["api_joueurs_a"] = noms_api
+                noms_api_a = st.session_state.get("api_joueurs_a", [])
+                if noms_api_a:
+                    st.info(f"🌐 Trouvé via API : {', '.join(noms_api_a[:3])}")
+                    for n in noms_api_a:
+                        if n not in [j for j, _ in suggestions_a]:
+                            suggestions_a.append((n, 75))
             if suggestions_a:
                 options_a = [
-                    f"{j} (similarité {s:.0f}%)"
+                    f"{j} (similarite {s:.0f}%)"
                     for j, s in suggestions_a
                 ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
                 choix_a  = st.selectbox(
-                    "Sélectionne le joueur A",
+                    "Selectionne le joueur A",
                     options_a, key="choix_a"
                 )
                 if choix_a == "❌ Aucun de ces joueurs — aller dans Joueurs":
@@ -410,13 +481,25 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
         joueur_b = None
         if nom_b:
             suggestions_b = recherche_floue(nom_b, liste_joueurs)
+            if len(suggestions_b) < 3 and len(nom_b) >= 3:
+                if st.button("🔍 Chercher aussi via API", key="btn_api_search_b"):
+                    with st.spinner("Recherche API..."):
+                        noms_api = recherche_api_joueur(nom_b)
+                    if noms_api:
+                        st.session_state["api_joueurs_b"] = noms_api
+                noms_api_b = st.session_state.get("api_joueurs_b", [])
+                if noms_api_b:
+                    st.info(f"🌐 Trouvé via API : {', '.join(noms_api_b[:3])}")
+                    for n in noms_api_b:
+                        if n not in [j for j, _ in suggestions_b]:
+                            suggestions_b.append((n, 75))
             if suggestions_b:
                 options_b = [
-                    f"{j} (similarité {s:.0f}%)"
+                    f"{j} (similarite {s:.0f}%)"
                     for j, s in suggestions_b
                 ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
                 choix_b  = st.selectbox(
-                    "Sélectionne le joueur B",
+                    "Selectionne le joueur B",
                     options_b, key="choix_b"
                 )
                 if choix_b == "❌ Aucun de ces joueurs — aller dans Joueurs":
