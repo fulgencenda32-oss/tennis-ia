@@ -799,106 +799,43 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             st.markdown("---")
 
             # ── Over/Under ──
-            st.markdown("**📈 Over / Under**")
-            col_ou1, col_ou2, col_ou3 = st.columns(3)
+            st.markdown("**📈 Over / Under — Total Jeux**")
 
-            with col_ou1:
-                ou_over = res.get('ou_sets_over', res['nb_sets'] > 2)
-                ou_proba = res.get('ou_sets_proba', 1.0 if ou_over else 0.0)
-                label_sets = "OVER 2.5" if ou_over else "UNDER 2.5"
-                couleur_sets = "🟢" if ou_over else "🔴"
-                st.metric(
-                    "Sets O/U 2.5",
-                    f"{couleur_sets} {label_sets}",
-                    f"Confiance IA : {round(max(ou_proba, 1-ou_proba)*100)}%"
-                )
+            # Calcul probabilités Over/Under
+            ou_jeux = res.get('ou_jeux_predit')
+            ou_std  = res.get('ou_jeux_std', 3.5)
 
-            with col_ou2:
-                ou_jeux = res.get('ou_jeux_val', 0)
-                if ou_jeux > 0:
-                    label_jeux = f"OVER 22.5" if ou_jeux > 22 else "UNDER 22.5"
-                    couleur_jeux = "🟢" if ou_jeux > 22 else "🔴"
-                    st.metric(
-                        "Jeux O/U 22.5",
-                        f"{couleur_jeux} {label_jeux}",
-                        f"{ou_jeux} jeux prédits par IA"
-                    )
-                else:
-                    st.metric("Jeux O/U 22.5", "—", "Modèle en cours d'entraînement")
+            if ou_jeux is not None:
+                from scipy import stats as _stats
 
-            with col_ou3:
-                if ou_jeux > 0:
-                    seuil_custom = st.number_input(
-                        "Seuil personnalisé (jeux)",
-                        min_value=15, max_value=45, value=22, step=1,
-                        key="ou_custom"
-                    )
-                    label_custom = f"OVER {seuil_custom}.5" if ou_jeux > seuil_custom else f"UNDER {seuil_custom}.5"
-                    couleur_custom = "🟢" if ou_jeux > seuil_custom else "🔴"
-                    st.metric(
-                        f"Jeux O/U {seuil_custom}.5",
-                        f"{couleur_custom} {label_custom}",
-                        f"{ou_jeux} jeux prédits"
-                    )
-                else:
-                    st.metric("Seuil personnalisé", "—", "Disponible après réentraînement")
+                SEUILS = [18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 32.5]
 
-            st.markdown("---")
+                # Trouver le seuil le plus proche du total prédit
+                seuil_proche = min(SEUILS, key=lambda s: abs(s - ou_jeux))
 
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                st.markdown("**📊 Statistiques comparées**")
-                stats_df = pd.DataFrame({
-                    'Statistique' : [
-                        'ELO général',
-                        f'ELO {surface}',
-                        'Forme récente',
-                        'H2H (victoires)',
-                        'Classement',
-                    ],
-                    joueur_a : [
-                        res['elo_a'],
-                        res['elo_a_surf'],
-                        f"{res['forme_a']}%",
-                        res['h2h_a'],
-                        f"#{res['rank_a']}",
-                    ],
-                    joueur_b : [
-                        res['elo_b'],
-                        res['elo_b_surf'],
-                        f"{res['forme_b']}%",
-                        res['h2h_b'],
-                        f"#{res['rank_b']}",
-                    ]
-                })
+                # Tableau des probabilités
+                import pandas as _pd2
+                rows_ou = []
+                for seuil in SEUILS:
+                    # Probabilité OVER = P(X > seuil) avec distribution normale
+                    prob_over  = round(float(1 - _stats.norm.cdf(seuil, loc=ou_jeux, scale=ou_std)) * 100, 1)
+                    prob_under = round(100 - prob_over, 1)
+                    marker = " ✅" if seuil == seuil_proche else ""
+                    rows_ou.append({
+                        "Seuil"        : f"{seuil}{marker}",
+                        "UNDER"        : f"{prob_under}%",
+                        "OVER"         : f"{prob_over}%",
+                    })
+
+                st.caption(f"Total jeux prédit par l'IA : **{ou_jeux} jeux**")
                 st.dataframe(
-                    stats_df, hide_index=True,
+                    _pd2.DataFrame(rows_ou),
+                    hide_index=True,
                     use_container_width=True
                 )
-
-            with col_d2:
-                st.markdown("**🎯 Probabilités**")
-                fig = go.Figure(go.Bar(
-                    x=[joueur_a, joueur_b],
-                    y=[res['proba_a'], res['proba_b']],
-                    marker_color=['#2d9e56', '#FF5722'],
-                    text=[
-                        f"{res['proba_a']}%",
-                        f"{res['proba_b']}%"
-                    ],
-                    textposition='auto',
-                ))
-                fig.update_layout(
-                    yaxis_title="Probabilité (%)",
-                    yaxis_range=[0, 100],
-                    height=300,
-                    margin=dict(t=20),
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white'),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
+                st.caption("✅ = seuil le plus proche du total prédit · Basé sur distribution statistique autour de la prédiction IA")
+            else:
+                st.info("Modèle Over/Under disponible après réentraînement (`python entrainement_hebdo.py`)")
 
             # Comparaison IA vs Bookmaker + Value Bet
             if utiliser_cotes and cote_a and cote_b and cote_a > 1 and cote_b > 1:

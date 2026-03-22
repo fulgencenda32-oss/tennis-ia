@@ -322,7 +322,6 @@ df['nb_sets']       = pd.array([p[0] for p in parsed], dtype='Int8')
 df['sets_winner']   = pd.array([p[1] for p in parsed], dtype='Int8')
 df['handicap_sets'] = pd.array([p[2] for p in parsed], dtype='Int8')
 df['total_jeux']    = pd.array([p[3] for p in parsed], dtype='Int16')
-df['over_sets']     = (df['nb_sets'] > 2).astype('Int8')
 
 # Recalcul ELO complet
 elo_g2 = defaultdict(lambda: 1500.0)
@@ -466,27 +465,25 @@ modele_handi.fit(X_tr_h, y_tr_h, verbose=False)
 acc_handi = accuracy_score(y_te_h+1, modele_handi.predict(X_te_h)+1)
 print(f"   ✅ Précision : {acc_handi*100:.1f}%")
 
-print("\n🤖 Réentraînement Modèle 4 — Over/Under Sets 2.5...")
-df_ou_sets = df_clean[df_clean['over_sets'].notna()].copy()
-df_ou_sets['cote_diff'] = 0.0; df_ou_sets['cote_proba_A'] = 0.5; df_ou_sets['cote_proba_B'] = 0.5
-X_ou_s = df_ou_sets[FEATURES].fillna(0).astype('float32')
-y_ou_s = df_ou_sets['over_sets'].astype(int)
-X_tr_ou_s, X_te_ou_s, y_tr_ou_s, y_te_ou_s = train_test_split(X_ou_s, y_ou_s, test_size=0.2, random_state=42, stratify=y_ou_s)
-modele_ou_sets = XGBClassifier(n_estimators=200, max_depth=5, learning_rate=0.05, eval_metric='logloss', random_state=42, n_jobs=-1)
-modele_ou_sets.fit(X_tr_ou_s, y_tr_ou_s, verbose=False)
-acc_ou_sets = accuracy_score(y_te_ou_s, modele_ou_sets.predict(X_te_ou_s))
-print(f"   ✅ Précision O/U Sets : {acc_ou_sets*100:.1f}%")
+print("\n🤖 Réentraînement Modèle 4 — Total jeux (Over/Under)...")
+df_jeux = df_clean[df_clean['total_jeux'].notna() & (df_clean['total_jeux'] > 0)].copy()
+df_jeux['cote_diff'] = 0.0; df_jeux['cote_proba_A'] = 0.5; df_jeux['cote_proba_B'] = 0.5
+X_j = df_jeux[FEATURES].fillna(0).astype('float32')
+y_j = df_jeux['total_jeux'].astype(float)
+X_tr_j, X_te_j, y_tr_j, y_te_j = train_test_split(X_j, y_j, test_size=0.2, random_state=42)
+modele_jeux = XGBRegressor(
+    n_estimators=300, max_depth=6, learning_rate=0.05,
+    subsample=0.8, colsample_bytree=0.8,
+    random_state=42, n_jobs=-1
+)
+modele_jeux.fit(X_tr_j, y_tr_j, verbose=False)
+mae_jeux  = float(abs(y_te_j.values - modele_jeux.predict(X_te_j)).mean())
+std_jeux  = float(abs(y_te_j.values - modele_jeux.predict(X_te_j)).std())
+print(f"   ✅ Erreur moyenne : ±{mae_jeux:.1f} jeux  |  Std : {std_jeux:.1f}")
 
-print("\n🤖 Réentraînement Modèle 5 — Total Jeux (Over/Under jeux)...")
-df_ou_jeux = df_clean[df_clean['total_jeux'].notna() & (df_clean['total_jeux'] > 0)].copy()
-df_ou_jeux['cote_diff'] = 0.0; df_ou_jeux['cote_proba_A'] = 0.5; df_ou_jeux['cote_proba_B'] = 0.5
-X_ou_j = df_ou_jeux[FEATURES].fillna(0).astype('float32')
-y_ou_j = df_ou_jeux['total_jeux'].astype(float)
-X_tr_ou_j, X_te_ou_j, y_tr_ou_j, y_te_ou_j = train_test_split(X_ou_j, y_ou_j, test_size=0.2, random_state=42)
-modele_ou_jeux = XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.05, subsample=0.8, random_state=42, n_jobs=-1)
-modele_ou_jeux.fit(X_tr_ou_j, y_tr_ou_j, verbose=False)
-mae_jeux = abs(y_te_ou_j.values - modele_ou_jeux.predict(X_te_ou_j)).mean()
-print(f"   ✅ Erreur moyenne total jeux : ±{mae_jeux:.1f} jeux")
+# Calcul std globale sur le dataset pour les probabilités
+std_globale_jeux = float(df_jeux['total_jeux'].std())
+print(f"   ✅ Std globale total jeux : {std_globale_jeux:.1f}")
 
 # Dictionnaire scores
 def parser_score_str(score_str):
@@ -524,13 +521,13 @@ forme_final = df_clean.groupby('winner_name')['forme_winner'].last().to_dict()
 print("\n💾 Sauvegarde...")
 modeles_complets = {
     'modele_win': modele_win, 'modele_sets': modele_sets, 'modele_handi': modele_handi,
-    'modele_ou_sets': modele_ou_sets, 'modele_ou_jeux': modele_ou_jeux,
+    'modele_jeux': modele_jeux,
     'features': FEATURES, 'simplifier_round': simplifier_round,
     'dico_scores': dico_scores, 'dico_scores_surf': dico_scores_surf,
     'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final,
     'surface_map': surface_map, 'circuit_map': circuit_map,
     'acc_win': acc_win, 'acc_sets': acc_sets, 'acc_handi': acc_handi,
-    'acc_ou_sets': acc_ou_sets, 'mae_ou_jeux': mae_jeux,
+    'mae_jeux': mae_jeux, 'std_jeux': std_jeux, 'std_globale_jeux': std_globale_jeux,
     'date_entrainement': datetime.now().strftime('%Y-%m-%d %H:%M'),
 }
 
@@ -573,8 +570,7 @@ print(f"  Total matchs en base    : {len(df_clean):,}")
 print(f"  Vainqueur               : {acc_win*100:.1f}%")
 print(f"  Nb Sets                 : {acc_sets*100:.1f}%")
 print(f"  Handicap                : {acc_handi*100:.1f}%")
-print(f"  Over/Under Sets 2.5     : {acc_ou_sets*100:.1f}%")
-print(f"  Total Jeux (erreur moy) : ±{mae_jeux:.1f} jeux")
+print(f"  Total jeux (erreur moy) : +/-{mae_jeux:.1f} jeux")
 print(f"  Joueurs avec ELO        : {len(elo_final):,}")
 print(f"  Date                    : {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 print(f"{'='*60}")

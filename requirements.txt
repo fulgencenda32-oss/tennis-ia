@@ -11,3 +11,4 @@ firebase-admin>=6.0.0
 huggingface_hub>=0.20.0
 
 extra-streamlit-components>=0.1.60
+scipy>=1.10.0
