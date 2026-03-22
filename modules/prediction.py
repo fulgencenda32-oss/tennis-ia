@@ -151,9 +151,11 @@ def predire_match(
 ):
     joueur_a = normaliser_nom(joueur_a)
     joueur_b = normaliser_nom(joueur_b)
-    modele_win       = modeles['modele_win']
-    modele_sets      = modeles['modele_sets']
-    modele_handi     = modeles['modele_handi']
+    modele_win        = modeles['modele_win']
+    modele_sets       = modeles['modele_sets']
+    modele_handi      = modeles['modele_handi']
+    modele_ou_sets    = modeles.get('modele_ou_sets', None)
+    modele_ou_jeux    = modeles.get('modele_ou_jeux', None)
     FEATURES         = modeles['features']
     elo_final        = modeles['elo_final']
     elo_surf         = modeles['elo_final_surf']
@@ -356,10 +358,10 @@ def predire_match(
         'cotes_fournies' : cote_a is not None,
         'date'           : datetime.now().strftime('%Y-%m-%d %H:%M'),
         # Over/Under sets 2.5 — Modèle IA
-        'ou_sets_proba'  : float(modele_ou_sets.predict_proba(X)[0][1]) if 'modele_ou_sets' in modeles else (1.0 if nb_sets_p > 2 else 0.0),
-        'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if 'modele_ou_sets' in modeles else nb_sets_p > 2,
+        'ou_sets_proba'  : float(modele_ou_sets.predict_proba(X)[0][1]) if modele_ou_sets is not None else (1.0 if nb_sets_p > 2 else 0.0),
+        'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if modele_ou_sets is not None else nb_sets_p > 2,
         # Over/Under jeux — Modèle IA
-        'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if 'modele_ou_jeux' in modeles else 0,
+        'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if modele_ou_jeux is not None else 0,
     }
 
 # ============================================================
@@ -802,7 +804,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             with col_ou1:
                 ou_over = res.get('ou_sets_over', res['nb_sets'] > 2)
-                ou_proba = res.get('ou_sets_proba', 1.0 if ou_over else 0.0)
                 label_sets = "OVER 2.5" if ou_over else "UNDER 2.5"
                 couleur_sets = "🟢" if ou_over else "🔴"
                 st.metric(
