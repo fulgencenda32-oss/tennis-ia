@@ -804,6 +804,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             with col_ou1:
                 ou_over = res.get('ou_sets_over', res['nb_sets'] > 2)
+                ou_proba = res.get('ou_sets_proba', 1.0 if ou_over else 0.0)
                 label_sets = "OVER 2.5" if ou_over else "UNDER 2.5"
                 couleur_sets = "🟢" if ou_over else "🔴"
                 st.metric(
