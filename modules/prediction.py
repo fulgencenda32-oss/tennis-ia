@@ -635,17 +635,47 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
+
+            # Comparaison IA vs Bookmaker + Value Bet
+            if utiliser_cotes and cote_a and cote_b and cote_a > 1 and cote_b > 1:
+                st.markdown("---")
+                st.markdown("**📊 Prédiction IA vs Bookmaker**")
+
+                # Calcul probas bookmaker normalisees
+                raw_a = 1 / cote_a
+                raw_b = 1 / cote_b
+                total_raw = raw_a + raw_b
+                prob_bk_a = round(raw_a / total_raw * 100, 1)
+                prob_bk_b = round(raw_b / total_raw * 100, 1)
+
+                col_ia, col_bk = st.columns(2)
+                with col_ia:
+                    st.markdown("**🤖 IA**")
+                    st.metric(joueur_a, f"{res['proba_a']}%")
+                    st.metric(joueur_b, f"{res['proba_b']}%")
+                with col_bk:
+                    st.markdown("**📊 Bookmaker**")
+                    st.metric(joueur_a, f"{prob_bk_a}%", f"cote {cote_a}")
+                    st.metric(joueur_b, f"{prob_bk_b}%", f"cote {cote_b}")
+
             # Value bet
             if res['value_bet_info']:
+                st.markdown("---")
                 for info in res['value_bet_info']:
+                    profit = round(info['valeur'] * 100)
                     st.success(
-                        f"💰 VALUE BET sur **{info['joueur']}** "
-                        f"— Cote bookmaker : {info['cote']} "
-                        f"— Probabilite IA : {info['proba']}% "
-                        f"— Valeur : **+{info['valeur']}%**"
+                        f"💰 **VALUE BET detecte sur {info['joueur']}**\n\n"
+                        f"- IA predit : **{info['proba']}%** de chances\n"
+                        f"- Bookmaker estime : **{round(100/info['cote'], 1)}%** (cote {info['cote']})\n"
+                        f"- Avantage mathematique : **+{info['valeur']}%**\n"
+                        f"- Pour 10 000 FCFA mises → profit espere **{profit} FCFA**"
                     )
+                st.warning(
+                    "⚠️ Un value bet est une opportunite mathematique sur le long terme "
+                    "— pas une garantie de victoire pour ce match specifique."
+                )
             elif utiliser_cotes:
-                st.info("❌ Pas de value bet detecte")
+                st.info("❌ Pas de value bet detecte — les cotes sont bien calibrees par rapport a la prediction IA.")
 
             # Sauvegarde
             sauvegarder_prediction(res)
