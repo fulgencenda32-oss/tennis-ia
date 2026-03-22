@@ -641,6 +641,48 @@ print(f"   ✅ Erreur moyenne : ±{mae_jeux:.1f} jeux  |  Std : {std_jeux:.1f}")
 std_globale_jeux = float(df_jeux['total_jeux'].std())
 print(f"   ✅ Std globale total jeux : {std_globale_jeux:.1f}")
 
+# ── Modèles spécialisés par surface ──
+print("\n🤖 Réentraînement Modèles par surface (Hard / Clay / Grass)...")
+modeles_surf = {}
+acc_surf = {}
+
+for surf_nom, surf_enc_val in [('Hard', 4), ('Clay', 1), ('Grass', 3)]:
+    mask_surf = df_clean['surface'].str.contains(surf_nom, case=False, na=False)
+    df_surf = df_clean[mask_surf].copy()
+
+    if len(df_surf) < 500:
+        print(f"   ⚠️  {surf_nom} : pas assez de matchs ({len(df_surf)}), modèle global utilisé")
+        modeles_surf[surf_nom] = None
+        acc_surf[surf_nom] = None
+        continue
+
+    # Dataset symétrique pour cette surface
+    df_sA = df_surf.copy(); df_sA['target'] = 1
+    df_sB = df_surf.copy(); df_sB['target'] = 0
+    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff',
+                'streak_diff','comeback_diff','clutch_diff','bigmatch_diff',
+                'dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff','age_diff','cote_diff']:
+        if col in df_sB.columns:
+            df_sB[col] = -df_surf[col].fillna(0).values
+    df_sB['cote_proba_A'] = df_surf['cote_proba_B'].values
+    df_sB['cote_proba_B'] = df_surf['cote_proba_A'].values
+
+    df_sym_s = pd.concat([df_sA, df_sB], ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
+    X_s2 = df_sym_s[FEATURES].fillna(0).astype('float32')
+    y_s2 = df_sym_s['target'].astype(int)
+    X_tr_s2, X_te_s2, y_tr_s2, y_te_s2 = train_test_split(X_s2, y_s2, test_size=0.2, random_state=42, stratify=y_s2)
+
+    m_surf = XGBClassifier(n_estimators=300, max_depth=6, learning_rate=0.05,
+                           subsample=0.8, colsample_bytree=0.8,
+                           eval_metric='logloss', random_state=42, n_jobs=-1)
+    m_surf.fit(X_tr_s2, y_tr_s2, verbose=False)
+    acc_s = accuracy_score(y_te_s2, m_surf.predict(X_te_s2))
+    modeles_surf[surf_nom] = m_surf
+    acc_surf[surf_nom] = acc_s
+    print(f"   ✅ {surf_nom} : {len(df_surf):,} matchs — Précision {acc_s*100:.1f}%")
+
+print("   ✅ Modèles par surface terminés")
+
 # Dictionnaire scores
 def parser_score_str(score_str):
     if not isinstance(score_str, str): return ''
@@ -685,6 +727,7 @@ print("\n💾 Sauvegarde...")
 modeles_complets = {
     'modele_win': modele_win, 'modele_sets': modele_sets, 'modele_handi': modele_handi,
     'modele_jeux': modele_jeux,
+    'modeles_surf': modeles_surf, 'acc_surf': acc_surf,
     'features': FEATURES, 'simplifier_round': simplifier_round,
     'dico_scores': dico_scores, 'dico_scores_surf': dico_scores_surf,
     'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final, 'streak_final': streak_final, 'ioc_final': ioc_final, 'comeback_final': comeback_final, 'clutch_final': clutch_final, 'bigmatch_final': bigmatch_final, 'dominance_final': dominance_final, 'tournoi_hist_final': tournoi_hist_final,
@@ -730,6 +773,8 @@ print(f"🎉 RÉENTRAÎNEMENT TERMINÉ")
 print(f"{'='*60}")
 print(f"  Nouveaux matchs ajoutés : {nb_nouveaux}")
 print(f"  Total matchs en base    : {len(df_clean):,}")
+for s, a in acc_surf.items():
+    if a: print(f"  Modèle {s:<6}          : {a*100:.1f}%")
 print(f"  Vainqueur               : {acc_win*100:.1f}%")
 print(f"  Nb Sets                 : {acc_sets*100:.1f}%")
 print(f"  Handicap                : {acc_handi*100:.1f}%")

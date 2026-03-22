@@ -215,6 +215,8 @@ def predire_match(
     modele_win        = modeles['modele_win']
     modele_sets       = modeles['modele_sets']
     modele_handi      = modeles['modele_handi']
+    # Modèles spécialisés par surface
+    modeles_surf      = modeles.get('modeles_surf', {})
     modele_ou_sets    = modeles.get('modele_ou_sets', None)
     modele_ou_jeux    = modeles.get('modele_ou_jeux', None)
     FEATURES         = modeles['features']
@@ -375,9 +377,15 @@ def predire_match(
     }])[FEATURES].fillna(0).astype('float32')
 
     # Prédictions
-    proba_a    = float(modele_win.predict_proba(X)[0][1])
+    # Choisir le modèle spécialisé si disponible pour cette surface
+    surf_key = 'Hard' if 'hard' in surface.lower() else ('Clay' if 'clay' in surface.lower() else ('Grass' if 'grass' in surface.lower() else 'Hard'))
+    modele_surf_spec = modeles_surf.get(surf_key) if modeles_surf else None
+    modele_actif = modele_surf_spec if modele_surf_spec is not None else modele_win
+
+    proba_a    = float(modele_actif.predict_proba(X)[0][1])
     nb_sets_p  = int(modele_sets.predict(X)[0]) + 2
     handicap_p = int(modele_handi.predict(X)[0]) + 1
+    modele_utilise = f"Spécialisé {surf_key}" if modele_surf_spec is not None else "Général" 
 
     # Score exact — utilise scores realistes varies
     scores_2sets = [
@@ -475,6 +483,7 @@ def predire_match(
         'rank_a'         : safe_int(rank_a),
         'rank_b'         : safe_int(rank_b),
         'surface'        : surface,
+        'modele_utilise' : modele_utilise,
         'tournoi'        : tournoi,
         'best_of'        : best_of,
         'value_bet'      : value_bet_info[0]['joueur'] if value_bet_info else None,
@@ -971,6 +980,9 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             st.success("✅ Prédiction calculée !")
 
             # ── Score de confiance ──
+            modele_info = res.get('modele_utilise', 'Général')
+            if 'Spécialisé' in modele_info:
+                st.info(f"🎯 Modèle **{modele_info}** utilisé pour cette prédiction")
             conf = res.get('confiance', {})
             if conf:
                 niveau  = conf.get('niveau', '')
