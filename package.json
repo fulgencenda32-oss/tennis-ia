@@ -1,0 +1,13 @@
+{
+  "name": "tennis_ia",
+  "version": "1.0.0",
+  "description": "--- title: Tennis IA emoji: 🎾 colorFrom: green colorTo: blue sdk: streamlit sdk_version: \"1.42.0\" python_version: \"3.10\" app_file: app.py pinned: false ---",
+  "main": "service-worker.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

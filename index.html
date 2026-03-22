@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="theme-color" content="#2d9e56">
+    <meta name="description" content="Tennis IA — Intelligence Artificielle de Prédictions Tennis">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tennis IA">
+<<<<<<< HEAD
+    <link rel="manifest" href="/tennis-ia-pwa/manifest.json">
+    <link rel="apple-touch-icon" href="/tennis-ia-pwa/icon-192.png">
+=======
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+    <title>Tennis IA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+<<<<<<< HEAD
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+=======
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+            background: linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a1628 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+<<<<<<< HEAD
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* Splash screen */
+        .splash {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+
+        .app-icon {
+            width: 120px;
+            height: 120px;
+            border-radius: 28px;
+            background: linear-gradient(135deg, #1a6b3a, #2d9e56);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.4rem;
+            font-weight: 900;
+            color: white;
+            box-shadow: 0 12px 40px rgba(45,158,86,0.5);
+            letter-spacing: -1px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 12px 40px rgba(45,158,86,0.5); }
+            50%       { box-shadow: 0 12px 60px rgba(45,158,86,0.8); }
+        }
+
+        .app-name {
+            font-size: 2rem;
+=======
+        }
+
+        /* Header */
+        .header {
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(90deg, #1a6b3a, #2d9e56, #1a6b3a);
+            box-shadow: 0 4px 20px rgba(45,158,86,0.3);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+<<<<<<< HEAD
+        .app-tagline {
+            font-size: 0.9rem;
+            opacity: 0.6;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        /* Loader */
+        .loader {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .loader span {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #2d9e56;
+            animation: bounce 0.8s ease-in-out infinite;
+        }
+
+        .loader span:nth-child(2) { animation-delay: 0.15s; }
+        .loader span:nth-child(3) { animation-delay: 0.30s; }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0);    opacity: 0.4; }
+            50%       { transform: translateY(-12px); opacity: 1; }
+        }
+
+        .redirect-text {
+            font-size: 0.8rem;
+            opacity: 0.4;
+            margin-top: 8px;
+        }
+
+        /* Stats en bas */
+        .stats {
+            position: fixed;
+            bottom: 40px;
+            display: flex;
+            gap: 24px;
+        }
+
+        .stat {
+=======
+        .header p {
+            font-size: 0.85rem;
+            opacity: 0.85;
+            margin-top: 4px;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            padding: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(45,158,86,0.3);
+            border-radius: 12px;
+            padding: 14px 10px;
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+            text-align: center;
+        }
+
+        .stat-value {
+<<<<<<< HEAD
+            font-size: 1.2rem;
+=======
+            font-size: 1.4rem;
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+            font-weight: 700;
+            color: #4ade80;
+        }
+
+        .stat-label {
+<<<<<<< HEAD
+            font-size: 0.65rem;
+            opacity: 0.5;
+            margin-top: 2px;
+=======
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        /* Main CTA */
+        .main-cta {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            gap: 16px;
+        }
+
+        .app-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 24px;
+            background: linear-gradient(135deg, #1a6b3a, #2d9e56);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 900;
+            color: white;
+            box-shadow: 0 8px 32px rgba(45,158,86,0.4);
+            letter-spacing: -1px;
+        }
+
+        .app-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .app-subtitle {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .btn-open {
+            background: linear-gradient(135deg, #1a6b3a, #2d9e56);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            padding: 16px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(45,158,86,0.4);
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 8px;
+        }
+
+        .btn-open:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(45,158,86,0.6);
+        }
+
+        .btn-install {
+            background: transparent;
+            color: #4ade80;
+            border: 2px solid #2d9e56;
+            border-radius: 14px;
+            padding: 14px 40px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: none;
+        }
+
+        .btn-install:hover {
+            background: rgba(45,158,86,0.1);
+        }
+
+        .btn-install.visible {
+            display: inline-block;
+        }
+
+        /* Features */
+        .features {
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .feature {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .feature-icon {
+            font-size: 1.4rem;
+            flex-shrink: 0;
+        }
+
+        .feature-text {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+
+        .feature-title {
+            font-weight: 600;
+            opacity: 1;
+            font-size: 0.85rem;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 16px;
+            text-align: center;
+            font-size: 0.75rem;
+            opacity: 0.4;
+        }
+
+        /* Install banner */
+        .install-banner {
+            display: none;
+            background: linear-gradient(135deg, #1a6b3a, #2d9e56);
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .install-banner.visible {
+            display: flex;
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+        }
+    </style>
+</head>
+<body>
+
+<<<<<<< HEAD
+    <div class="splash">
+        <div class="app-icon">T·IA</div>
+        <div class="app-name">Tennis IA</div>
+        <div class="app-tagline">
+            Intelligence Artificielle<br>de Prédictions Tennis
+        </div>
+        <div class="loader">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <div class="redirect-text">Chargement en cours...</div>
+    </div>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value">67.8%</div>
+            <div class="stat-label">Vainqueur</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">70.9%</div>
+            <div class="stat-label">Nb Sets</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">830K+</div>
+            <div class="stat-label">Matchs</div>
+        </div>
+    </div>
+
+    <script>
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/tennis-ia-pwa/service-worker.js');
+        }
+
+        // Redirection automatique après 2.5 secondes
+        setTimeout(() => {
+            window.location.href = 'https://fulgence10-tennis-ia.hf.space';
+        }, 2500);
+    </script>
+
+=======
+    <!-- Install Banner -->
+    <div class="install-banner" id="installBanner">
+        📲 Installer Tennis IA sur votre téléphone
+        <button onclick="installApp()" style="background:white;color:#1a6b3a;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer;">Installer</button>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>🎾 Tennis IA</h1>
+        <p>Intelligence Artificielle de Prédictions Tennis</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-value">67.8%</div>
+            <div class="stat-label">🏆 Vainqueur</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">70.9%</div>
+            <div class="stat-label">🔢 Nb Sets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">830K+</div>
+            <div class="stat-label">📊 Matchs</div>
+        </div>
+    </div>
+
+    <!-- Main CTA -->
+    <div class="main-cta">
+        <div class="app-icon">T·IA</div>
+        <div class="app-title">Tennis IA</div>
+        <div class="app-subtitle">
+            Prédictions IA · ATP · WTA · Challengers · ITF<br>
+            830 000+ matchs analysés (2010-2026)
+        </div>
+        <a href="https://fulgence10-tennis-ia.hf.space" class="btn-open" target="_blank">
+            🚀 Ouvrir l'application
+        </a>
+        <button class="btn-install" id="installBtn" onclick="installApp()">
+            📲 Installer sur mobile
+        </button>
+    </div>
+
+    <!-- Features -->
+    <div class="features">
+        <div class="feature">
+            <div class="feature-icon">🎾</div>
+            <div>
+                <div class="feature-title">Prédictions</div>
+                <div class="feature-text">Vainqueur, sets, handicap</div>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">📅</div>
+            <div>
+                <div class="feature-title">Matchs du jour</div>
+                <div class="feature-text">En temps réel via API</div>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">👤</div>
+            <div>
+                <div class="feature-title">Profil joueurs</div>
+                <div class="feature-text">ELO, forme, H2H</div>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">📚</div>
+            <div>
+                <div class="feature-title">Historique</div>
+                <div class="feature-text">Sauvegarde Firebase</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        Tennis IA © 2026 · Powered by XGBoost & HuggingFace
+    </div>
+
+    <script>
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(reg => console.log('SW enregistré'))
+                    .catch(err => console.log('SW erreur:', err));
+            });
+        }
+
+        // PWA Install
+        let deferredPrompt;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('installBanner').classList.add('visible');
+            document.getElementById('installBtn').classList.add('visible');
+        });
+
+        function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(result => {
+                    if (result.outcome === 'accepted') {
+                        document.getElementById('installBanner').classList.remove('visible');
+                        document.getElementById('installBtn').classList.remove('visible');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
+
+        window.addEventListener('appinstalled', () => {
+            document.getElementById('installBanner').classList.remove('visible');
+            document.getElementById('installBtn').classList.remove('visible');
+        });
+    </script>
+>>>>>>> 098ba87623553664ef7ea1b640b74340bdea2ece
+</body>
+</html>
