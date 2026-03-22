@@ -566,84 +566,84 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
         joueur_b = st.session_state.get("joueur_b_auto")
         if not joueur_b:
-                if nom_b:
+            if nom_b:
                 suggestions_b = recherche_floue(nom_b, liste_joueurs)
-            if len(suggestions_b) < 3 and len(nom_b) >= 3:
-                if st.button("🔍 Chercher aussi via API", key="btn_api_search_b"):
-                    with st.spinner("Recherche API..."):
-                        noms_api = recherche_api_joueur(nom_b)
-                    if noms_api:
-                        st.session_state["api_joueurs_b"] = noms_api
-                noms_api_b = st.session_state.get("api_joueurs_b", [])
+                if len(suggestions_b) < 3 and len(nom_b) >= 3:
+                    if st.button('🔍 Chercher via API', key='btn_api_search_b'):
+                        with st.spinner('Recherche API...'):
+                            noms_api = recherche_api_joueur(nom_b)
+                        if noms_api:
+                            st.session_state['api_joueurs_b'] = noms_api
+                noms_api_b = st.session_state.get('api_joueurs_b', [])
                 if noms_api_b:
                     st.info(f"🌐 Trouvé via API : {', '.join(noms_api_b[:3])}")
                     for n in noms_api_b:
                         if n not in [j for j, _ in suggestions_b]:
                             suggestions_b.append((n, 75))
-            if suggestions_b:
-                options_b = [
-                    f"{j} (similarite {s:.0f}%)"
-                    for j, s in suggestions_b
-                ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
-                choix_b  = st.selectbox(
-                    "Selectionne le joueur B",
-                    options_b, key="choix_b"
-                )
-                if choix_b == "❌ Aucun de ces joueurs — aller dans Joueurs":
-                    joueur_b = None
-                    st.markdown("---")
-                    st.markdown(f"### ➕ Ajouter **{nom_b}** à la base")
-                    onglet_api_b, onglet_csv_b = st.tabs(["🌐 Via API", "📁 Via CSV"])
-                    with onglet_api_b:
-                        if st.button("🔍 Rechercher via API", key="api_b"):
-                            from modules.joueurs import ajouter_joueur_api
-                            with st.spinner("Recherche en cours..."):
-                                matchs_api = ajouter_joueur_api(nom_b)
-                            if matchs_api:
-                                nouveaux = []
-                                for m in matchs_api:
-                                    nouveaux.append({
-                                        "winner_name": m.get("event_first_player", ""),
-                                        "loser_name": m.get("event_second_player", ""),
-                                        "surface": m.get("event_ground", "Hard"),
-                                        "tourney_name": m.get("league_name", "Unknown"),
-                                        "tourney_date": m.get("event_date", "2026-01-01"),
-                                        "score": m.get("event_final_result", ""),
-                                        "round": m.get("event_round", "R32"),
-                                        "winner_rank": m.get("first_player_rank", 500),
-                                        "loser_rank": m.get("second_player_rank", 500),
-                                    })
+                if suggestions_b:
+                    options_b = [
+                        f"{j} (similarite {s:.0f}%)"
+                        for j, s in suggestions_b
+                    ] + ['❌ Aucun de ces joueurs — aller dans Joueurs']
+                    choix_b = st.selectbox(
+                        'Selectionne le joueur B',
+                        options_b, key='choix_b'
+                    )
+                    if choix_b == '❌ Aucun de ces joueurs — aller dans Joueurs':
+                        joueur_b = None
+                        st.markdown('---')
+                        st.markdown(f'### ➕ Ajouter **{nom_b}** à la base')
+                        onglet_api_b, onglet_csv_b = st.tabs(['🌐 Via API', '📁 Via CSV'])
+                        with onglet_api_b:
+                            if st.button("🔍 Rechercher via API", key="api_b"):
+                                from modules.joueurs import ajouter_joueur_api
+                                with st.spinner("Recherche en cours..."):
+                                    matchs_api = ajouter_joueur_api(nom_b)
+                                if matchs_api:
+                                    nouveaux = []
+                                    for m in matchs_api:
+                                        nouveaux.append({
+                                            "winner_name": m.get("event_first_player", ""),
+                                            "loser_name": m.get("event_second_player", ""),
+                                            "surface": m.get("event_ground", "Hard"),
+                                            "tourney_name": m.get("league_name", "Unknown"),
+                                            "tourney_date": m.get("event_date", "2026-01-01"),
+                                            "score": m.get("event_final_result", ""),
+                                            "round": m.get("event_round", "R32"),
+                                            "winner_rank": m.get("first_player_rank", 500),
+                                            "loser_rank": m.get("second_player_rank", 500),
+                                        })
+                                    from modules.mise_a_jour import mise_a_jour_incrementale
+                                    modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                    df_new = pd.DataFrame(nouveaux)
+                                    if st.session_state.get("df_base") is not None:
+                                        st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                    st.session_state["modeles"] = modeles
+                                    st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
+                                else:
+                                    st.error(f"❌ {nom_b} non trouvé via API")
+                        with onglet_csv_b:
+                            st.info("""📋 **Format CSV requis :**
+    Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
+    Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R32, 450, 1
+    Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
+                            fichier_b = st.file_uploader("📁 Upload CSV joueur B", type=["csv"], key="csv_b")
+                            if fichier_b:
+                                df_up = pd.read_csv(fichier_b)
+                                nouveaux = df_up.to_dict("records")
                                 from modules.mise_a_jour import mise_a_jour_incrementale
                                 modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                                df_new = pd.DataFrame(nouveaux)
                                 if st.session_state.get("df_base") is not None:
-                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
                                 st.session_state["modeles"] = modeles
                                 st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
-                            else:
-                                st.error(f"❌ {nom_b} non trouvé via API")
-                    with onglet_csv_b:
-                        st.info("""📋 **Format CSV requis :**
-Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
-Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R32, 450, 1
-Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
-                        fichier_b = st.file_uploader("📁 Upload CSV joueur B", type=["csv"], key="csv_b")
-                        if fichier_b:
-                            df_up = pd.read_csv(fichier_b)
-                            nouveaux = df_up.to_dict("records")
-                            from modules.mise_a_jour import mise_a_jour_incrementale
-                            modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                            if st.session_state.get("df_base") is not None:
-                                st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
-                            st.session_state["modeles"] = modeles
-                            st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
-                    st.markdown("---")
-                else:
-                    joueur_b = suggestions_b[
-                        options_b.index(choix_b)
-                    ][0]
-                    elo_b = modeles['elo_final'].get(joueur_b, 1500)
-                    st.info(f"ELO : **{round(elo_b)}**")
+                        st.markdown("---")
+                    else:
+                        joueur_b = suggestions_b[
+                            options_b.index(choix_b)
+                        ][0]
+                        elo_b = modeles['elo_final'].get(joueur_b, 1500)
+                        st.info(f"ELO : **{round(elo_b)}**")
             else:
                 st.warning(
                     f"⚠️ '{nom_b}' introuvable — "
