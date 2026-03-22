@@ -1,3 +1,34 @@
+
+SURFACE_TOURNOI = {
+    # Hard
+    "miami": "Hard", "australian open": "Hard", "us open": "Hard",
+    "indian wells": "Hard", "cincinnati": "Hard", "montreal": "Hard",
+    "toronto": "Hard", "madrid": "Hard", "dubai": "Hard",
+    "doha": "Hard", "brisbane": "Hard", "auckland": "Hard",
+    "beijing": "Hard", "shanghai": "Hard", "paris": "Hard",
+    "vienna": "Hard", "basel": "Hard", "tokyo": "Hard",
+    "washington": "Hard", "atlanta": "Hard", "los angeles": "Hard",
+    # Clay
+    "roland garros": "Clay", "monte carlo": "Clay", "barcelona": "Clay",
+    "rome": "Clay", "hamburg": "Clay", "bucharest": "Clay",
+    "estoril": "Clay", "munich": "Clay", "lyon": "Clay",
+    "geneva": "Clay", "marrakech": "Clay", "casablanca": "Clay",
+    "istanbul": "Clay", "bastad": "Clay", "gstaad": "Clay",
+    "umag": "Clay", "kitzbuhel": "Clay", "winston-salem": "Clay",
+    "roland": "Clay", "garros": "Clay",
+    # Grass
+    "wimbledon": "Grass", "halle": "Grass", "queens": "Grass",
+    "eastbourne": "Grass", "s-hertogenbosch": "Grass", "nottingham": "Grass",
+    "newport": "Grass", "mallorca": "Grass",
+}
+
+def detecter_surface(nom_tournoi):
+    nom = str(nom_tournoi).lower()
+    for mot, surface in SURFACE_TOURNOI.items():
+        if mot in nom:
+            return surface
+    return "Hard"
+
 # v2 - groupes par tournoi
 # ============================================================
 # MODULE MATCHS DU JOUR
@@ -213,7 +244,7 @@ def page_matchs_jour(modeles, df_base):
                 circ = match["Circuit"].upper()
                 t = "WTA" if "WTA" in circ else "Challenger" if "CHALLENGER" in circ else "ITF" if "ITF" in circ else "ATP"
                 try:
-                    res = predire_match(j_a, j_b, modeles, df_base, surface="Hard", tournoi=t)
+                    res = predire_match(j_a, j_b, modeles, df_base, surface=detecter_surface(t), tournoi=t)
                     resultats.append({
                         "Joueur A": j_a_raw, "Joueur B": j_b_raw,
                         "Tournoi": match["Tournoi"], "Vainqueur IA": res["vainqueur"],
@@ -300,5 +331,5 @@ def page_matchs_jour(modeles, df_base):
                             st.error(f"Erreur : {data['erreur']}")
                         else:
                             st.success(f"Vainqueur : {data['res']['vainqueur']} ({data['res']['proba_v']}%) | Score : {data['res']['score_exact']} | Sets : {data['res']['nb_sets']}")
-                            afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], "Hard")
+                            afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], detecter_surface(data.get("tournoi", "")))
                     st.divider()
