@@ -276,7 +276,8 @@ def section_predictions():
 
     st.markdown("---")
     st.markdown("**📊 Répartition par surface**")
-    st.bar_chart(df_preds["Surface"].value_counts(), height=250)
+    if "Surface" in df_preds.columns and df_preds["Surface"].notna().any():
+        st.bar_chart(df_preds["Surface"].value_counts(), height=250)
 
 
 # ============================================================
