@@ -357,12 +357,103 @@ def predire_match(
         'value_bet_info' : value_bet_info,
         'cotes_fournies' : cote_a is not None,
         'date'           : datetime.now().strftime('%Y-%m-%d %H:%M'),
+        # Score de confiance
+        'confiance'      : _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h2h, rank_a, rank_b),
         # Over/Under sets 2.5 — Modèle IA
         'ou_sets_proba'  : float(modele_ou_sets.predict_proba(X)[0][1]) if modele_ou_sets is not None else (1.0 if nb_sets_p > 2 else 0.0),
         'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if modele_ou_sets is not None else nb_sets_p > 2,
         # Over/Under jeux — Modèle IA
         'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if modele_ou_jeux is not None else 0,
     }
+
+# ============================================================
+# SCORE DE CONFIANCE
+# ============================================================
+def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h2h, rank_a, rank_b):
+    """
+    Calcule un score de confiance global basé sur plusieurs facteurs.
+    Retourne un dict avec niveau, score, couleur et détails.
+    """
+    score = 0
+    details = []
+
+    # 1. Probabilité vainqueur (poids 40%)
+    if proba_v >= 0.75:
+        score += 40
+        details.append(f"Probabilité très élevée ({round(proba_v*100)}%)")
+    elif proba_v >= 0.65:
+        score += 25
+        details.append(f"Probabilité élevée ({round(proba_v*100)}%)")
+    elif proba_v >= 0.58:
+        score += 10
+        details.append(f"Probabilité modérée ({round(proba_v*100)}%)")
+    else:
+        details.append(f"Match serré ({round(proba_v*100)}%)")
+
+    # 2. Différence ELO (poids 25%)
+    elo_diff = abs(elo_a - elo_b)
+    if elo_diff >= 200:
+        score += 25
+        details.append(f"Grand écart ELO ({round(elo_diff)} pts)")
+    elif elo_diff >= 100:
+        score += 15
+        details.append(f"Écart ELO modéré ({round(elo_diff)} pts)")
+    elif elo_diff >= 50:
+        score += 8
+    else:
+        details.append("ELO proches (match incertain)")
+
+    # 3. Forme récente (poids 20%)
+    forme_diff = abs(forme_a - forme_b)
+    if forme_diff >= 0.3:
+        score += 20
+        details.append(f"Grande différence de forme ({round(forme_diff*100)}%)")
+    elif forme_diff >= 0.15:
+        score += 12
+        details.append(f"Différence de forme notable ({round(forme_diff*100)}%)")
+    elif forme_diff >= 0.05:
+        score += 5
+
+    # 4. H2H (poids 10%)
+    if total_h2h >= 3:
+        h2h_dom = max(wins_a, total_h2h - wins_a) / total_h2h
+        if h2h_dom >= 0.75:
+            score += 10
+            details.append(f"Domination H2H ({round(h2h_dom*100)}%)")
+        elif h2h_dom >= 0.6:
+            score += 5
+
+    # 5. Classement (poids 5%)
+    try:
+        rank_diff = abs(int(rank_a or 500) - int(rank_b or 500))
+        if rank_diff >= 100:
+            score += 5
+            details.append(f"Grand écart classement ({rank_diff} places)")
+    except Exception:
+        pass
+
+    # Déterminer le niveau
+    if score >= 70:
+        niveau   = "HAUTE"
+        emoji    = "🟢"
+        couleur  = "success"
+    elif score >= 45:
+        niveau   = "MOYENNE"
+        emoji    = "🟡"
+        couleur  = "warning"
+    else:
+        niveau   = "FAIBLE"
+        emoji    = "🔴"
+        couleur  = "error"
+
+    return {
+        'niveau'  : niveau,
+        'score'   : score,
+        'emoji'   : emoji,
+        'couleur' : couleur,
+        'details' : details,
+    }
+
 
 # ============================================================
 # PAGE PRÉDICTION
@@ -755,6 +846,27 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             incrementer_compteur_predictions()
             st.success("✅ Prédiction calculée !")
 
+            # ── Score de confiance ──
+            conf = res.get('confiance', {})
+            if conf:
+                niveau  = conf.get('niveau', '')
+                emoji   = conf.get('emoji', '')
+                score_c = conf.get('score', 0)
+                details = conf.get('details', [])
+                couleur = conf.get('couleur', 'info')
+
+                if couleur == 'success':
+                    st.success(f"{emoji} **Confiance {niveau}** — Score IA : {score_c}/100")
+                elif couleur == 'warning':
+                    st.warning(f"{emoji} **Confiance {niveau}** — Score IA : {score_c}/100")
+                else:
+                    st.error(f"{emoji} **Confiance {niveau}** — Score IA : {score_c}/100")
+
+                if details:
+                    with st.expander("📋 Détails du score de confiance"):
+                        for d in details:
+                            st.markdown(f"• {d}")
+
             # ── Zone Copier ──
             texte_copie = (
                 f"🎾 TENNIS IA - Prediction\n"
@@ -762,6 +874,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 f"Surface : {surface} | Tournoi : {tournoi}\n"
                 f"---------------------\n"
                 f"Vainqueur : {res['vainqueur']} ({res['proba_v']}%)\n"
+                f"Confiance : {res.get('confiance', {}).get('emoji', '')} {res.get('confiance', {}).get('niveau', '')}\n"
                 f"Score exact : {res['score_exact']}\n"
                 f"Nombre de sets : {res['nb_sets']}\n"
                 f"Handicap : {res['handicap']} set(s)\n"
