@@ -275,10 +275,12 @@ def section_predictions():
     st.dataframe(df_preds, use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.markdown("**📊 Répartition par surface**")
-    surfaces_pred = df_preds["Surface"].replace("-", None).dropna()
-    if not surfaces_pred.empty:
-        st.bar_chart(surfaces_pred.value_counts(), height=250)
+    st.markdown("---")
+    if not df_preds.empty and "Surface" in df_preds.columns:
+        st.markdown("**Repartition par surface**")
+        surfaces_pred = df_preds["Surface"].replace("-", None).dropna()
+        if not surfaces_pred.empty:
+            st.bar_chart(surfaces_pred.value_counts(), height=250)
 
 
 # ============================================================
