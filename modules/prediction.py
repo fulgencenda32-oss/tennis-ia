@@ -467,7 +467,7 @@ def page_prediction(modeles, df_base):
                         for n in noms_api_a:
                             if n not in [j for j, _ in suggestions_a]:
                                 suggestions_a.append((n, 75))
-            if suggestions_a:
+                if suggestions_a:
                 options_a = [
                     f"{j} (similarite {s:.0f}%)"
                     for j, s in suggestions_a
