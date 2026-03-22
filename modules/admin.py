@@ -113,12 +113,12 @@ def section_dashboard(users):
         df_dates["mois"] = df_dates["date"].dt.to_period("M").astype(str)
         compte_mois = df_dates.groupby("mois").size().reset_index(name="inscriptions")
         st.markdown("**📈 Inscriptions par mois**")
-        st.bar_chart(compte_mois.set_index("mois"))
+        st.bar_chart(compte_mois.set_index("mois"), height=250)
 
     # Répartition plans
     st.markdown("**💰 Répartition des plans**")
     plans = pd.Series([u.get("plan", "gratuit") for u in users]).value_counts()
-    st.bar_chart(plans)
+    st.bar_chart(plans, height=250)
 
 
 # ============================================================
@@ -276,8 +276,9 @@ def section_predictions():
 
     st.markdown("---")
     st.markdown("**📊 Répartition par surface**")
-    if "Surface" in df_preds.columns and df_preds["Surface"].notna().any():
-        st.bar_chart(df_preds["Surface"].value_counts(), height=250)
+    surfaces_pred = df_preds["Surface"].replace("-", None).dropna()
+    if not surfaces_pred.empty:
+        st.bar_chart(surfaces_pred.value_counts(), height=250)
 
 
 # ============================================================
