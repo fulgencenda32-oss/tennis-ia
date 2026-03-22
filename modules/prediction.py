@@ -566,7 +566,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
         joueur_b = st.session_state.get("joueur_b_auto")
         if not joueur_b:
-            if nom_b:
+                if nom_b:
                 suggestions_b = recherche_floue(nom_b, liste_joueurs)
             if len(suggestions_b) < 3 and len(nom_b) >= 3:
                 if st.button("🔍 Chercher aussi via API", key="btn_api_search_b"):
