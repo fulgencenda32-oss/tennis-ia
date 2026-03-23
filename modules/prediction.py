@@ -218,7 +218,7 @@ def predire_match(
     # Modèles spécialisés par surface
     modeles_surf      = modeles.get('modeles_surf', {})
     modele_ou_sets    = modeles.get('modele_ou_sets', None)
-    modele_ou_jeux    = modeles.get('modele_ou_jeux', None)
+    modele_ou_jeux    = modeles.get('modele_jeux', None)  # clé correcte dans le pkl
     FEATURES         = modeles['features']
     elo_final        = modeles['elo_final']
     elo_surf         = modeles['elo_final_surf']
@@ -497,6 +497,8 @@ def predire_match(
         'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if modele_ou_sets is not None else nb_sets_p > 2,
         # Over/Under jeux — Modèle IA
         'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if modele_ou_jeux is not None else 0,
+        'ou_jeux_predit' : round(float(modele_ou_jeux.predict(X)[0]), 1) if modele_ou_jeux is not None else None,
+        'ou_jeux_std'    : modeles.get('std_globale_jeux', 3.5),
     }
 
 # ============================================================
