@@ -1003,14 +1003,39 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         for d in details:
                             st.markdown(f"• {d}")
 
-            # ── Zone Copier ──
+            # ── Zone Copier + WhatsApp ──
+            conf_emoji  = res.get('confiance', {}).get('emoji', '')
+            conf_niveau = res.get('confiance', {}).get('niveau', '')
+            vb_info     = res.get('value_bet_info', [])
+            ou_sets_lbl = 'OVER 2.5' if res.get('ou_sets_over') else 'UNDER 2.5'
+
+            texte_whatsapp = (
+                f"🎾 *TENNIS IA — Prédiction*\n"
+                f"*{joueur_a}* vs *{joueur_b}*\n"
+                f"📍 {surface} | {tournoi}\n"
+                f"─────────────────────\n"
+                f"🏆 Vainqueur : *{res['vainqueur']}* ({res['proba_v']}%)\n"
+                f"{conf_emoji} Confiance : *{conf_niveau}*\n"
+                f"🎯 Score : {res['score_exact']}\n"
+                f"🔢 Sets : {res['nb_sets']} | ⚖️ Handicap : {res['handicap']}\n"
+                f"📈 O/U Sets : *{ou_sets_lbl}*\n"
+            )
+            if vb_info:
+                for vb in vb_info:
+                    texte_whatsapp += f"─────────────────────\n💰 *VALUE BET : {vb['joueur']}* (+{vb['valeur']}%)\n"
+            texte_whatsapp += (
+                f"─────────────────────\n"
+                f"_Fait avec Tennis IA 🎾_\n"
+                f"https://fulgence10-tennis-ia.hf.space"
+            )
+
             texte_copie = (
                 f"🎾 TENNIS IA - Prediction\n"
                 f"Match : {joueur_a} vs {joueur_b}\n"
                 f"Surface : {surface} | Tournoi : {tournoi}\n"
                 f"---------------------\n"
                 f"Vainqueur : {res['vainqueur']} ({res['proba_v']}%)\n"
-                f"Confiance : {res.get('confiance', {}).get('emoji', '')} {res.get('confiance', {}).get('niveau', '')}\n"
+                f"Confiance : {conf_emoji} {conf_niveau}\n"
                 f"Score exact : {res['score_exact']}\n"
                 f"Nombre de sets : {res['nb_sets']}\n"
                 f"Handicap : {res['handicap']} set(s)\n"
@@ -1019,8 +1044,20 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 f"Forme : {joueur_a} {res['forme_a']}% | {joueur_b} {res['forme_b']}%\n"
                 f"H2H : {joueur_a} {res['h2h_a']} | {joueur_b} {res['h2h_b']}"
             )
-            st.markdown("**📋 Copier la prédiction :**")
-            st.code(texte_copie, language=None)
+
+            col_cp1, col_cp2 = st.columns([3, 1])
+            with col_cp1:
+                st.markdown("**📋 Copier la prédiction :**")
+                st.code(texte_copie, language=None)
+            with col_cp2:
+                st.markdown(" ")
+                st.markdown(" ")
+                import urllib.parse
+                wa_url = "https://wa.me/?text=" + urllib.parse.quote(texte_whatsapp)
+                st.markdown(
+                    f'<a href="{wa_url}" target="_blank" style="display:inline-block;background:#25D366;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;text-align:center;width:100%;box-sizing:border-box;">📲 Partager<br>WhatsApp</a>',
+                    unsafe_allow_html=True
+                )
 
             st.markdown("---")
 

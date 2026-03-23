@@ -243,7 +243,16 @@ if nb_nouveaux > 0:
 if nb_nouveaux > 0:
     print(f"\n🤖 Affinage rapide des modèles ({nb_nouveaux} nouveaux matchs)...")
 
-    def simplifier_round(r):
+    FEATURES_AFFINAGE = ['elo_diff','elo_diff_surf','forme_diff','h2h_diff',
+                         'fatigue_diff','streak_diff','comeback_diff','clutch_diff',
+                         'bigmatch_diff','dominance_diff','revanche_diff','hist_tournoi_diff',
+                         'rank_diff','age_diff','surface_enc','circuit_enc','genre_enc',
+                         'best_of','round_num','cote_diff','cote_proba_A','cote_proba_B']
+
+    surface_map_a = modeles['surface_map']
+    circuit_map_a = modeles['circuit_map']
+
+    def simplifier_round_a(r):
         r = str(r).upper()
         if 'QUARTER' in r or 'QF' in r: return 4
         if 'SEMI'    in r or 'SF' in r: return 5
@@ -252,22 +261,18 @@ if nb_nouveaux > 0:
         if 'R64'  in r: return 2
         return 3
 
-    surface_map = modeles['surface_map']
-    circuit_map = modeles['circuit_map']
-    FEATURES    = modeles['features']
-
-    def preparer_features(df_matchs):
+    def preparer_features_affinage(df_matchs):
         rows = []
         for _, row in df_matchs.iterrows():
             w    = str(row['winner_name'])
             l    = str(row['loser_name'])
             surf = str(row.get('surface', 'Hard'))
             rows.append({
-                'elo_diff'      : elo_g[w] - elo_g[l],
-                'elo_diff_surf' : elo_s[surf][w] - elo_s[surf][l],
-                'forme_diff'    : modeles['forme_final'].get(w, 0.5) - modeles['forme_final'].get(l, 0.5),
-                'h2h_diff'      : 0.0,
-                'fatigue_diff'  : 0.0,
+                'elo_diff'         : elo_g[w] - elo_g[l],
+                'elo_diff_surf'    : elo_s[surf][w] - elo_s[surf][l],
+                'forme_diff'       : modeles['forme_final'].get(w, 0.5) - modeles['forme_final'].get(l, 0.5),
+                'h2h_diff'         : 0.0,
+                'fatigue_diff'     : 0.0,
                 'streak_diff'      : float(modeles.get('streak_final', {}).get(w, 0)) - float(modeles.get('streak_final', {}).get(l, 0)),
                 'comeback_diff'    : float(modeles.get('comeback_final', {}).get(w, 0.3)) - float(modeles.get('comeback_final', {}).get(l, 0.3)),
                 'clutch_diff'      : float(modeles.get('clutch_final', {}).get(w, 0.5)) - float(modeles.get('clutch_final', {}).get(l, 0.5)),
@@ -275,35 +280,46 @@ if nb_nouveaux > 0:
                 'dominance_diff'   : float(modeles.get('dominance_final', {}).get(w, 0.0)) - float(modeles.get('dominance_final', {}).get(l, 0.0)),
                 'revanche_diff'    : 0.0,
                 'hist_tournoi_diff': 0.0,
-                'rank_diff'     : float(str(row.get('loser_rank', 500) or 500)) - float(str(row.get('winner_rank', 500) or 500)),
-                'age_diff'      : 0.0,
-                'surface_enc'   : surface_map.get(surf, 4),
-                'circuit_enc'   : circuit_map.get(str(row.get('circuit', 'ATP')), 0),
-                'genre_enc'     : 1 if str(row.get('genre', 'M')) == 'F' else 0,
-                'best_of'       : int(row.get('best_of', 3) or 3),
-                'round_num'     : simplifier_round(row.get('round', 'R32')),
-                'cote_diff'     : 0.0,
-                'cote_proba_A'  : 0.5,
-                'cote_proba_B'  : 0.5,
+                'rank_diff'        : float(str(row.get('loser_rank', 500) or 500)) - float(str(row.get('winner_rank', 500) or 500)),
+                'age_diff'         : 0.0,
+                'surface_enc'      : surface_map_a.get(surf, 4),
+                'circuit_enc'      : circuit_map_a.get(str(row.get('circuit', 'ATP')), 0),
+                'genre_enc'        : 1 if str(row.get('genre', 'M')) == 'F' else 0,
+                'best_of'          : int(row.get('best_of', 3) or 3),
+                'round_num'        : simplifier_round_a(row.get('round', 'R32')),
+                'cote_diff'        : 0.0,
+                'cote_proba_A'     : 0.5,
+                'cote_proba_B'     : 0.5,
             })
-        return pd.DataFrame(rows)[FEATURES].fillna(0).astype('float32')
+        return pd.DataFrame(rows)[FEATURES_AFFINAGE].fillna(0).astype('float32')
 
-    # Dataset symétrique nouveaux matchs
-    X_new  = preparer_features(df_new)
-    X_newB = X_new.copy()
-    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff','streak_diff','comeback_diff','clutch_diff','bigmatch_diff','dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff','age_diff','cote_diff']:
-        X_newB[col] = -X_new[col]
+    try:
+        X_new  = preparer_features_affinage(df_new)
+        X_newB = X_new.copy()
+        cols_inverses = ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff',
+                         'streak_diff','comeback_diff','clutch_diff','bigmatch_diff',
+                         'dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff',
+                         'age_diff','cote_diff']
+        for col in cols_inverses:
+            if col in X_newB.columns:
+                X_newB[col] = -X_new[col]
 
-    X_affinage = pd.concat([X_new, X_newB], ignore_index=True)
-    y_affinage = np.array([1]*len(X_new) + [0]*len(X_newB))
+        X_affinage = pd.concat([X_new, X_newB], ignore_index=True)
+        y_affinage = np.array([1]*len(X_new) + [0]*len(X_newB))
 
-    # Affinage modèle vainqueur
-    modeles['modele_win'].fit(
-        X_affinage, y_affinage,
-        xgb_model=modeles['modele_win'].get_booster(),
-        verbose=False
-    )
-    print("   ✅ Modèle vainqueur affiné")
+        # Vérifier compatibilité features avec le modèle existant
+        modele_features = modeles['modele_win'].get_booster().feature_names
+        if modele_features and set(modele_features) == set(FEATURES_AFFINAGE):
+            modeles['modele_win'].fit(
+                X_affinage, y_affinage,
+                xgb_model=modeles['modele_win'].get_booster(),
+                verbose=False
+            )
+            print("   ✅ Modèle vainqueur affiné")
+        else:
+            print("   ℹ️  Features incompatibles — affinage ignoré, réentraînement complet ci-dessous")
+    except Exception as e:
+        print(f"   ℹ️  Affinage ignoré ({e}) — réentraînement complet ci-dessous")
 
 # ============================================================
 # ÉTAPE 8 — RÉENTRAÎNEMENT COMPLET (hebdomadaire)
@@ -641,48 +657,6 @@ print(f"   ✅ Erreur moyenne : ±{mae_jeux:.1f} jeux  |  Std : {std_jeux:.1f}")
 std_globale_jeux = float(df_jeux['total_jeux'].std())
 print(f"   ✅ Std globale total jeux : {std_globale_jeux:.1f}")
 
-# ── Modèles spécialisés par surface ──
-print("\n🤖 Réentraînement Modèles par surface (Hard / Clay / Grass)...")
-modeles_surf = {}
-acc_surf = {}
-
-for surf_nom, surf_enc_val in [('Hard', 4), ('Clay', 1), ('Grass', 3)]:
-    mask_surf = df_clean['surface'].str.contains(surf_nom, case=False, na=False)
-    df_surf = df_clean[mask_surf].copy()
-
-    if len(df_surf) < 500:
-        print(f"   ⚠️  {surf_nom} : pas assez de matchs ({len(df_surf)}), modèle global utilisé")
-        modeles_surf[surf_nom] = None
-        acc_surf[surf_nom] = None
-        continue
-
-    # Dataset symétrique pour cette surface
-    df_sA = df_surf.copy(); df_sA['target'] = 1
-    df_sB = df_surf.copy(); df_sB['target'] = 0
-    for col in ['elo_diff','elo_diff_surf','forme_diff','h2h_diff','fatigue_diff',
-                'streak_diff','comeback_diff','clutch_diff','bigmatch_diff',
-                'dominance_diff','revanche_diff','hist_tournoi_diff','rank_diff','age_diff','cote_diff']:
-        if col in df_sB.columns:
-            df_sB[col] = -df_surf[col].fillna(0).values
-    df_sB['cote_proba_A'] = df_surf['cote_proba_B'].values
-    df_sB['cote_proba_B'] = df_surf['cote_proba_A'].values
-
-    df_sym_s = pd.concat([df_sA, df_sB], ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
-    X_s2 = df_sym_s[FEATURES].fillna(0).astype('float32')
-    y_s2 = df_sym_s['target'].astype(int)
-    X_tr_s2, X_te_s2, y_tr_s2, y_te_s2 = train_test_split(X_s2, y_s2, test_size=0.2, random_state=42, stratify=y_s2)
-
-    m_surf = XGBClassifier(n_estimators=300, max_depth=6, learning_rate=0.05,
-                           subsample=0.8, colsample_bytree=0.8,
-                           eval_metric='logloss', random_state=42, n_jobs=-1)
-    m_surf.fit(X_tr_s2, y_tr_s2, verbose=False)
-    acc_s = accuracy_score(y_te_s2, m_surf.predict(X_te_s2))
-    modeles_surf[surf_nom] = m_surf
-    acc_surf[surf_nom] = acc_s
-    print(f"   ✅ {surf_nom} : {len(df_surf):,} matchs — Précision {acc_s*100:.1f}%")
-
-print("   ✅ Modèles par surface terminés")
-
 # Dictionnaire scores
 def parser_score_str(score_str):
     if not isinstance(score_str, str): return ''
@@ -727,7 +701,6 @@ print("\n💾 Sauvegarde...")
 modeles_complets = {
     'modele_win': modele_win, 'modele_sets': modele_sets, 'modele_handi': modele_handi,
     'modele_jeux': modele_jeux,
-    'modeles_surf': modeles_surf, 'acc_surf': acc_surf,
     'features': FEATURES, 'simplifier_round': simplifier_round,
     'dico_scores': dico_scores, 'dico_scores_surf': dico_scores_surf,
     'elo_final': elo_final, 'elo_final_surf': elo_final_surf, 'forme_final': forme_final, 'streak_final': streak_final, 'ioc_final': ioc_final, 'comeback_final': comeback_final, 'clutch_final': clutch_final, 'bigmatch_final': bigmatch_final, 'dominance_final': dominance_final, 'tournoi_hist_final': tournoi_hist_final,
@@ -773,8 +746,6 @@ print(f"🎉 RÉENTRAÎNEMENT TERMINÉ")
 print(f"{'='*60}")
 print(f"  Nouveaux matchs ajoutés : {nb_nouveaux}")
 print(f"  Total matchs en base    : {len(df_clean):,}")
-for s, a in acc_surf.items():
-    if a: print(f"  Modèle {s:<6}          : {a*100:.1f}%")
 print(f"  Vainqueur               : {acc_win*100:.1f}%")
 print(f"  Nb Sets                 : {acc_sets*100:.1f}%")
 print(f"  Handicap                : {acc_handi*100:.1f}%")
