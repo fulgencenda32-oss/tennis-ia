@@ -253,11 +253,18 @@ def charger_modeles():
 
 @st.cache_data
 def charger_base():
+    # Seules 4 colonnes sont utilisées par l'app pour les prédictions
+    # winner_name/loser_name : filtrage matchs
+    # winner_rank/loser_rank : récupération classement
+    COLS = ['winner_name', 'loser_name', 'winner_rank', 'loser_rank']
     chemin = os.path.join(
         os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
     )
     if os.path.exists(chemin):
-        return pd.read_csv(chemin, low_memory=False)
+        try:
+            return pd.read_csv(chemin, usecols=COLS, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin, low_memory=False)
     try:
         from huggingface_hub import hf_hub_download
         chemin_hf = hf_hub_download(
@@ -265,7 +272,10 @@ def charger_base():
             filename  = 'BASE_FEATURES.csv',
             repo_type = 'dataset'
         )
-        return pd.read_csv(chemin_hf, low_memory=False)
+        try:
+            return pd.read_csv(chemin_hf, usecols=COLS, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin_hf, low_memory=False)
     except Exception as e:
         return None
 
