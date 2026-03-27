@@ -41,8 +41,10 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY  = os.getenv("ALLSPORTS_API_KEY")
 BASE_URL = "https://apiv2.allsportsapi.com/tennis/"
+
+# ── Rotation intelligente multi-clés API ──
+from modules.api_rotation import appel_api
 
 # ============================================================
 # DETECTION HORS-LIGNE
@@ -58,19 +60,20 @@ def est_hors_ligne():
 # ============================================================
 # RECUPERATION MATCHS
 # ============================================================
-@st.cache_data(ttl=1800)
-def get_matchs_periode(date_debut, date_fin, api_key):
-    try:
-        r = requests.get(BASE_URL, params={
-            "met": "Fixtures", "APIkey": api_key,
-            "from": date_debut, "to": date_fin,
-        }, timeout=15)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("success") == 1:
-                return data.get("result", [])
-    except Exception as e:
-        st.error(f"Erreur API : {e}")
+def get_matchs_periode(date_debut, date_fin, api_key=None):
+    """Récupère les matchs via rotation intelligente de clés API + cache."""
+    resultat = appel_api(
+        {"met": "Fixtures", "from": date_debut, "to": date_fin},
+        utiliser_cache=True
+    )
+    if resultat["source"] == "erreur":
+        st.error(resultat["message"])
+        return []
+    if resultat["source"] in ("cache", "cache_expire"):
+        st.caption(f"📦 {resultat['message']}")
+    data = resultat.get("data") or {}
+    if data.get("success") == 1:
+        return data.get("result", [])
     return []
 
 # ============================================================
@@ -185,10 +188,9 @@ def page_matchs_jour(modeles, df_base):
             return
 
         with st.spinner("Chargement des matchs..."):
-            key = os.getenv("ALLSPORTS_API_KEY")
-            matchs_raw = get_matchs_periode(date_str, date_str, key)
+            matchs_raw = get_matchs_periode(date_str, date_str)
             if not matchs_raw:
-                matchs_raw = get_matchs_periode(date_str, date_str_fin, key)
+                matchs_raw = get_matchs_periode(date_str, date_str_fin)
 
         df_matchs = traiter_matchs(matchs_raw, filtre_circuit, filtre_statut)
         if df_matchs.empty:

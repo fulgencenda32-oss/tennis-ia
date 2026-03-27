@@ -147,6 +147,39 @@ def get_api_key():
     ]
     return [c for c in cles if c]
 
+def recherche_api_joueur(nom):
+    """Recherche un joueur via API avec rotation intelligente des clés."""
+    from modules.api_rotation import appel_api
+    from datetime import datetime, timedelta
+
+    cache_key = f"api_search_{nom.lower().strip()}"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
+    date_fin   = datetime.now().strftime("%Y-%m-%d")
+    date_debut = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    resultat = appel_api({"met": "Fixtures", "from": date_debut, "to": date_fin})
+    if resultat["source"] == "erreur" or not resultat.get("data"):
+        return []
+
+    data = resultat["data"]
+    if data.get("success") != 1:
+        return []
+
+    noms_trouves = []
+    mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
+    for m in data.get("result", []):
+        p1 = str(m.get("event_first_player", ""))
+        p2 = str(m.get("event_second_player", ""))
+        for p in [p1, p2]:
+            if "/" not in p and any(mot in p.lower() for mot in mots):
+                if p not in noms_trouves:
+                    noms_trouves.append(p)
+
+    st.session_state[cache_key] = noms_trouves[:5]
+    return noms_trouves[:5]
+
 def recherche_floue(nom, liste_joueurs, limite=5, seuil=55):
     if not nom or len(nom) < 2:
         return []
@@ -163,42 +196,6 @@ def recherche_floue(nom, liste_joueurs, limite=5, seuil=55):
                     if s >= seuil and j not in [b[0] for b in bons]:
                         bons.append((j, min(s, 85)))
     return sorted(bons, key=lambda x: x[1], reverse=True)[:limite]
-
-def recherche_api_joueur(nom):
-    cles = get_api_key()
-    if not cles:
-        return []
-    cache_key = f"api_search_{nom.lower().strip()}"
-    if cache_key in st.session_state:
-        return st.session_state[cache_key]
-    import requests
-    from datetime import datetime, timedelta
-    date_fin = datetime.now().strftime("%Y-%m-%d")
-    date_debut = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
-    for cle in cles:
-        try:
-            r = requests.get("https://apiv2.allsportsapi.com/tennis/", params={
-                "met": "Fixtures", "APIkey": cle,
-                "from": date_debut, "to": date_fin,
-            }, timeout=8)
-            if r.status_code == 200:
-                data = r.json()
-                if data.get("success") == 1:
-                    matchs = data.get("result", [])
-                    noms_trouves = []
-                    mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
-                    for m in matchs:
-                        p1 = str(m.get("event_first_player", ""))
-                        p2 = str(m.get("event_second_player", ""))
-                        for p in [p1, p2]:
-                            if "/" not in p and any(mot in p.lower() for mot in mots):
-                                if p not in noms_trouves:
-                                    noms_trouves.append(p)
-                    st.session_state[cache_key] = noms_trouves[:5]
-                    return noms_trouves[:5]
-        except:
-            continue
-    return []
 
 # ============================================================
 # PRÉDICTION
@@ -594,46 +591,40 @@ def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h
 # PAGE PRÉDICTION
 # ============================================================
 def chercher_match_aujourd_hui(nom):
-    """Cherche si le nom correspond a un match du jour via API."""
-    cles = get_api_key()
-    if not cles:
-        return []
+    """Cherche si le nom correspond à un match du jour via rotation API + cache."""
+    from modules.api_rotation import appel_api
+    from datetime import datetime
+
     cache_key = f"matchs_jour_search_{nom.lower().strip()}"
     if cache_key in st.session_state:
         return st.session_state[cache_key]
-    import requests
-    from datetime import datetime
+
     aujourd_hui = datetime.now().strftime("%Y-%m-%d")
+    resultat = appel_api({"met": "Fixtures", "from": aujourd_hui, "to": aujourd_hui})
+    if resultat["source"] == "erreur" or not resultat.get("data"):
+        return []
+
+    data = resultat["data"]
+    if data.get("success") != 1:
+        return []
+
     mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
-    for cle in cles:
-        try:
-            r = requests.get("https://apiv2.allsportsapi.com/tennis/", params={
-                "met": "Fixtures", "APIkey": cle,
-                "from": aujourd_hui, "to": aujourd_hui,
-            }, timeout=8)
-            if r.status_code == 200:
-                data = r.json()
-                if data.get("success") == 1:
-                    matchs_trouves = []
-                    for m in data.get("result", []):
-                        p1 = str(m.get("event_first_player", ""))
-                        p2 = str(m.get("event_second_player", ""))
-                        if "/" in p1 or "/" in p2:
-                            continue
-                        p1_lower = p1.lower()
-                        p2_lower = p2.lower()
-                        if any(mot in p1_lower or mot in p2_lower for mot in mots):
-                            matchs_trouves.append({
-                                "joueur_a": p1,
-                                "joueur_b": p2,
-                                "tournoi": m.get("league_name", ""),
-                                "heure": m.get("event_time", ""),
-                            })
-                    st.session_state[cache_key] = matchs_trouves[:3]
-                    return matchs_trouves[:3]
-        except:
+    matchs_trouves = []
+    for m in data.get("result", []):
+        p1 = str(m.get("event_first_player", ""))
+        p2 = str(m.get("event_second_player", ""))
+        if "/" in p1 or "/" in p2:
             continue
-    return []
+        if any(mot in p1.lower() or mot in p2.lower() for mot in mots):
+            matchs_trouves.append({
+                "joueur_a": p1,
+                "joueur_b": p2,
+                "tournoi": m.get("league_name", ""),
+                "heure": m.get("event_time", ""),
+            })
+
+    st.session_state[cache_key] = matchs_trouves[:3]
+    return matchs_trouves[:3]
 
 def page_prediction(modeles, df_base):
     st.title("🎾 Prédiction de match")
