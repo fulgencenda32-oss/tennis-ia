@@ -12,6 +12,83 @@ FICHIER_HISTORIQUE = os.path.join(
 )
 
 # ============================================================
+# VERIFICATION RESULTATS REELS VIA API
+# ============================================================
+def verifier_resultats_via_api(historique):
+    """
+    Pour chaque prédiction sans résultat réel,
+    cherche le vrai résultat via l'API AllSports.
+    Retourne (nombre trouvés, historique mis à jour).
+    """
+    from modules.api_rotation import appel_api
+
+    trouves = 0
+    a_verifier = [
+        (i, h) for i, h in enumerate(historique)
+        if not h.get('resultat_reel')
+    ]
+
+    if not a_verifier:
+        return 0, historique
+
+    barre = st.progress(0, text="Recherche des résultats en cours...")
+
+    for idx, (i, h) in enumerate(a_verifier):
+        joueur_a = h.get('joueur_a', '')
+        joueur_b = h.get('joueur_b', '')
+        date     = str(h.get('date', ''))[:10]  # format YYYY-MM-DD
+
+        if not joueur_a or not joueur_b or not date:
+            continue
+
+        # Appel API pour ce jour
+        resultat = appel_api(
+            {"met": "Fixtures", "from": date, "to": date},
+            utiliser_cache=True
+        )
+
+        if resultat["source"] == "erreur" or not resultat.get("data"):
+            continue
+
+        data = resultat["data"]
+        if data.get("success") != 1:
+            continue
+
+        # Chercher le match dans les résultats
+        for match in data.get("result", []):
+            statut = str(match.get("event_status", "")).lower()
+            if statut not in ["finished", "retired", "walk over"]:
+                continue
+
+            p1    = str(match.get("event_first_player", "")).lower()
+            p2    = str(match.get("event_second_player", "")).lower()
+            nom_a = joueur_a.lower().split()[-1]
+            nom_b = joueur_b.lower().split()[-1]
+
+            if nom_a in p1 and nom_b in p2:
+                score          = str(match.get("event_final_result", ""))
+                vainqueur_reel = str(match.get("event_first_player", ""))
+                historique[i]['resultat_reel'] = vainqueur_reel
+                historique[i]['score_reel']    = score
+                trouves += 1
+                break
+            elif nom_b in p1 and nom_a in p2:
+                score          = str(match.get("event_final_result", ""))
+                vainqueur_reel = str(match.get("event_first_player", ""))
+                historique[i]['resultat_reel'] = vainqueur_reel
+                historique[i]['score_reel']    = score
+                trouves += 1
+                break
+
+        barre.progress(
+            (idx + 1) / len(a_verifier),
+            text=f"Vérification {idx+1}/{len(a_verifier)}..."
+        )
+
+    barre.empty()
+    return trouves, historique
+
+# ============================================================
 # CONNEXION FIREBASE
 # ============================================================
 def get_firebase_db():
@@ -189,11 +266,39 @@ def page_historique():
 
     st.markdown("---")
 
+    # ── Bouton vérification automatique ──
+    col_btn1, col_btn2 = st.columns([2, 3])
+    with col_btn1:
+        if st.button("🔍 Vérifier tous les résultats via API", type="primary"):
+            a_verifier = [h for h in historique if not h.get('resultat_reel')]
+            if not a_verifier:
+                st.success("✅ Tous les résultats sont déjà renseignés !")
+            else:
+                with st.spinner(f"Recherche des résultats pour {len(a_verifier)} prédiction(s)..."):
+                    trouves, historique = verifier_resultats_via_api(historique)
+                if trouves > 0:
+                    sauvegarder_historique(historique)
+                    st.success(f"✅ {trouves} résultat(s) trouvé(s) et sauvegardés !")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Aucun résultat trouvé — les matchs ne sont peut-être pas encore terminés.")
+    with col_btn2:
+        st.caption(f"⏳ {len([h for h in historique if not h.get('resultat_reel')])} prédiction(s) sans résultat réel")
+
+    st.markdown("---")
+
     # ── Tableau historique ──
     st.subheader("📋 Toutes les prédictions")
 
     rows = []
     for i, h in enumerate(historique):
+        res_reel  = h.get('resultat_reel', '')
+        vainqueur = h.get('vainqueur', '')
+        if res_reel and vainqueur:
+            correct = "✅" if res_reel.lower().split()[-1] == vainqueur.lower().split()[-1] else "❌"
+        else:
+            correct = "⏳"
+
         rows.append({
             'ID'             : i + 1,
             'Date'           : h.get('date', 'N/A'),
@@ -201,10 +306,15 @@ def page_historique():
             'Joueur B'       : h.get('joueur_b', 'N/A'),
             'Surface'        : h.get('surface', 'N/A'),
             'Tournoi'        : h.get('tournoi', 'N/A'),
-            'IA prédit'      : h.get('vainqueur', 'N/A'),
+            'Round'          : h.get('best_of', 'N/A'),
+            'IA prédit'      : vainqueur,
             'Probabilité'    : f"{h.get('proba_v', 0)}%",
+            'Score prédit'   : h.get('score_exact', 'N/A'),
             'Sets prédits'   : h.get('nb_sets', 'N/A'),
-            'Résultat réel'  : h.get('resultat_reel', '⏳ En attente'),
+            'Handicap'       : h.get('handicap', 'N/A'),
+            'Résultat réel'  : res_reel if res_reel else '⏳ En attente',
+            'Score réel'     : h.get('score_reel', '-'),
+            'Correct ?'      : correct,
         })
 
     df_hist = pd.DataFrame(rows)
