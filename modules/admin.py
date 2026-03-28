@@ -391,38 +391,230 @@ def section_broadcast():
 # ============================================================
 
 def section_stats_ia():
-    st.subheader("🤖 Statistiques IA")
+    st.subheader("🤖 Statistiques IA — Correct vs Incorrect")
 
-    preds = _charger_toutes_predictions(limit=500)
+    # Charger depuis Firebase ET historique local
+    preds = _charger_toutes_predictions(limit=1000)
+
+    # Compléter avec l'historique local si disponible
+    try:
+        from modules.historique import charger_historique
+        hist_local = charger_historique()
+        if hist_local:
+            # Fusionner en évitant les doublons
+            dates_fb = {p.get("date") for p in preds}
+            for h in hist_local:
+                if h.get("date") not in dates_fb:
+                    preds.append(h)
+    except Exception:
+        pass
+
     if not preds:
         st.info("Pas encore assez de prédictions.")
         return
 
-    st.metric("Total prédictions analysées", len(preds))
+    # ── Séparer prédictions avec et sans résultat réel ──
+    avec_res  = [p for p in preds if p.get("resultat_reel")]
+    sans_res  = [p for p in preds if not p.get("resultat_reel")]
 
-    tournois = pd.Series([p.get("tournoi", "Inconnu") for p in preds]).value_counts().head(10)
-    st.markdown("**Top 10 tournois**")
-    st.bar_chart(tournois, height=250)
+    def est_correct(p):
+        reel      = str(p.get("resultat_reel", "")).lower().strip().split()[-1] if p.get("resultat_reel") else ""
+        predit    = str(p.get("vainqueur", "")).lower().strip().split()[-1]
+        return reel and predit and reel == predit
 
-    surfaces = pd.Series([p.get("surface", "Inconnu") for p in preds]).value_counts()
-    st.markdown("**Repartition par surface**")
-    st.bar_chart(surfaces, height=250)
+    corrects   = [p for p in avec_res if est_correct(p)]
+    incorrects = [p for p in avec_res if not est_correct(p)]
+    pct_ok     = round(len(corrects) / len(avec_res) * 100, 1) if avec_res else 0
 
-    dates_pred = []
-    for p in preds:
+    # ── Métriques globales ──
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("📋 Total prédictions",   len(preds))
+    c2.metric("✅ Résultats connus",     len(avec_res))
+    c3.metric("🎯 Correctes",           len(corrects))
+    c4.metric("❌ Incorrectes",          len(incorrects))
+    c5.metric("📊 Précision réelle",    f"{pct_ok}%")
+
+    if not avec_res:
+        st.warning("⚠️ Aucune prédiction avec résultat réel pour l'instant.")
+        return
+
+    st.markdown("---")
+
+    # ── Graphique correct vs incorrect ──
+    import plotly.graph_objects as go
+
+    fig_global = go.Figure(go.Bar(
+        x=["✅ Correctes", "❌ Incorrectes"],
+        y=[len(corrects), len(incorrects)],
+        marker_color=["#2d9e56", "#ef4444"],
+        text=[f"{len(corrects)} ({pct_ok}%)", f"{len(incorrects)} ({round(100-pct_ok,1)}%)"],
+        textposition="auto",
+    ))
+    fig_global.update_layout(
+        height=250, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"), margin=dict(t=10, b=10),
+        yaxis=dict(gridcolor="rgba(255,255,255,0.1)")
+    )
+    st.plotly_chart(fig_global, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Précision par surface ──
+    st.markdown("**🏟️ Précision par surface**")
+    surfaces_data = {}
+    for p in avec_res:
+        surf = p.get("surface", "Inconnu") or "Inconnu"
+        if surf not in surfaces_data:
+            surfaces_data[surf] = {"total": 0, "corrects": 0}
+        surfaces_data[surf]["total"] += 1
+        if est_correct(p):
+            surfaces_data[surf]["corrects"] += 1
+
+    if surfaces_data:
+        rows_surf = []
+        for surf, d in sorted(surfaces_data.items()):
+            pct = round(d["corrects"] / d["total"] * 100, 1) if d["total"] > 0 else 0
+            rows_surf.append({
+                "Surface"   : surf,
+                "Total"     : d["total"],
+                "✅ Corrects": d["corrects"],
+                "❌ Incorrects": d["total"] - d["corrects"],
+                "Précision" : f"{pct}%",
+            })
+        df_surf = pd.DataFrame(rows_surf)
+        st.dataframe(df_surf, hide_index=True, use_container_width=True)
+
+        fig_surf = go.Figure()
+        fig_surf.add_trace(go.Bar(name="✅ Corrects",
+            x=df_surf["Surface"], y=df_surf["✅ Corrects"], marker_color="#2d9e56"))
+        fig_surf.add_trace(go.Bar(name="❌ Incorrects",
+            x=df_surf["Surface"], y=df_surf["❌ Incorrects"], marker_color="#ef4444"))
+        fig_surf.update_layout(
+            barmode="stack", height=250,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="white"), margin=dict(t=10, b=10),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02)
+        )
+        st.plotly_chart(fig_surf, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Précision par tournoi (Top 10) ──
+    st.markdown("**🏆 Précision par tournoi (Top 10 les plus prédits)**")
+    tournois_data = {}
+    for p in avec_res:
+        t = p.get("tournoi", "Inconnu") or "Inconnu"
+        if t not in tournois_data:
+            tournois_data[t] = {"total": 0, "corrects": 0}
+        tournois_data[t]["total"] += 1
+        if est_correct(p):
+            tournois_data[t]["corrects"] += 1
+
+    if tournois_data:
+        rows_t = []
+        for t, d in sorted(tournois_data.items(), key=lambda x: -x[1]["total"])[:10]:
+            pct = round(d["corrects"] / d["total"] * 100, 1) if d["total"] > 0 else 0
+            rows_t.append({
+                "Tournoi"   : t[:30],
+                "Total"     : d["total"],
+                "✅ Corrects": d["corrects"],
+                "Précision" : f"{pct}%",
+            })
+        st.dataframe(pd.DataFrame(rows_t), hide_index=True, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Précision par niveau de confiance ──
+    st.markdown("**🎯 Précision par niveau de confiance**")
+    conf_data = {"Haute": {"total":0,"corrects":0}, "Moyenne": {"total":0,"corrects":0}, "Faible": {"total":0,"corrects":0}}
+    for p in avec_res:
+        proba = p.get("proba_v", 0) or 0
+        try:
+            proba = float(proba)
+        except Exception:
+            proba = 0
+        if proba >= 65:
+            niveau = "Haute"
+        elif proba >= 55:
+            niveau = "Moyenne"
+        else:
+            niveau = "Faible"
+        conf_data[niveau]["total"] += 1
+        if est_correct(p):
+            conf_data[niveau]["corrects"] += 1
+
+    rows_conf = []
+    for niveau, d in conf_data.items():
+        pct = round(d["corrects"] / d["total"] * 100, 1) if d["total"] > 0 else 0
+        rows_conf.append({
+            "Confiance" : niveau,
+            "Total"     : d["total"],
+            "✅ Corrects": d["corrects"],
+            "Précision" : f"{pct}%",
+        })
+    st.dataframe(pd.DataFrame(rows_conf), hide_index=True, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Évolution de la précision dans le temps ──
+    st.markdown("**📈 Évolution de la précision (30 derniers jours)**")
+    dates_data = {}
+    for p in avec_res:
         d = p.get("date")
         if d:
             try:
                 if hasattr(d, "timestamp"):
-                    dates_pred.append(datetime.fromtimestamp(d.timestamp(), tz=timezone.utc).date())
+                    jour = datetime.fromtimestamp(d.timestamp(), tz=timezone.utc).strftime("%Y-%m-%d")
                 else:
-                    dates_pred.append(pd.to_datetime(str(d)).date())
+                    jour = str(d)[:10]
+                if jour not in dates_data:
+                    dates_data[jour] = {"total": 0, "corrects": 0}
+                dates_data[jour]["total"] += 1
+                if est_correct(p):
+                    dates_data[jour]["corrects"] += 1
             except Exception:
                 pass
-    if dates_pred:
-        counts = pd.DataFrame({"date": dates_pred}).groupby("date").size().tail(30)
-        st.markdown("**Predictions par jour (30 derniers jours)**")
-        st.line_chart(counts, height=250)
+
+    if dates_data:
+        jours = sorted(dates_data.keys())[-30:]
+        pcts  = [round(dates_data[j]["corrects"] / dates_data[j]["total"] * 100, 1)
+                 if dates_data[j]["total"] > 0 else 0 for j in jours]
+        fig_ev = go.Figure()
+        fig_ev.add_trace(go.Scatter(
+            x=jours, y=pcts, mode="lines+markers",
+            line=dict(color="#4ade80", width=2),
+            marker=dict(size=6),
+            fill="tozeroy", fillcolor="rgba(45,158,86,0.1)",
+        ))
+        fig_ev.add_hline(y=50, line_dash="dot", line_color="rgba(255,255,255,0.3)", annotation_text="50%")
+        fig_ev.update_layout(
+            height=260, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="white"), margin=dict(t=10, b=10),
+            xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+            yaxis=dict(title="% Précision", range=[0, 105], gridcolor="rgba(255,255,255,0.1)"),
+        )
+        st.plotly_chart(fig_ev, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Tableau des prédictions incorrectes récentes ──
+    st.markdown("**❌ Dernières prédictions incorrectes**")
+    rows_err = []
+    for p in incorrects[-20:][::-1]:
+        rows_err.append({
+            "Date"          : str(p.get("date", ""))[:10],
+            "Joueur A"      : p.get("joueur_a", "—"),
+            "Joueur B"      : p.get("joueur_b", "—"),
+            "IA avait prédit": p.get("vainqueur", "—"),
+            "Vrai vainqueur": p.get("resultat_reel", "—"),
+            "Probabilité"   : f"{p.get('proba_v', '?')}%",
+            "Surface"       : p.get("surface", "—"),
+            "Tournoi"       : str(p.get("tournoi", "—"))[:25],
+        })
+    if rows_err:
+        st.dataframe(pd.DataFrame(rows_err), hide_index=True, use_container_width=True)
+    else:
+        st.success("🎉 Aucune prédiction incorrecte enregistrée !")
 
 
 # ============================================================
