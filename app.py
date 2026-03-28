@@ -358,7 +358,8 @@ if CHARGE:
     from modules.mise_a_jour    import page_mise_a_jour
     from modules.performance    import page_performance
     from modules.matchs_du_jour import page_matchs_jour
-    from modules.paiement import page_paiement
+    from modules.paiement       import page_paiement
+    from modules.suggestions    import page_suggestions
 
     # Onglets de base
     onglets = [
@@ -367,7 +368,8 @@ if CHARGE:
         "👤 Joueurs",
         "🔄 Mise à jour",
         "📚 Historique",
-        "📊 Performance IA"
+        "📊 Performance IA",
+        "💡 Suggestions",
     ]
 
     # Ajouter onglet Admin si c'est Fulgence N'da
@@ -389,14 +391,18 @@ if CHARGE:
         page_historique()
     with tabs[5]:
         page_performance()
+    with tabs[6]:
+        page_suggestions()
 
-    # Panel Admin visible uniquement pour vous
-    idx_premium = len(onglets) - 1
-    with tabs[idx_premium]:
-        page_paiement()
+    # Admin (tab 7) + Premium (dernier tab)
     if is_admin():
-        with tabs[6]:
+        with tabs[7]:
             afficher_panel_admin()
+        with tabs[8]:
+            page_paiement()
+    else:
+        with tabs[7]:
+            page_paiement()
 
     # Restaurer onglet actif via JavaScript
     import streamlit.components.v1 as _components
