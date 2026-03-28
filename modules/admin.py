@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 # Réutilise get_db() déjà défini dans auth.py
 from modules.auth import get_db
 from modules.suggestions import section_suggestions_admin
+from modules.logs import section_logs_admin
 
 # ============================================================
 # UTILITAIRES
@@ -648,6 +649,7 @@ def afficher_panel_admin_complet():
         "📢 Broadcast",
         "🤖 Stats IA",
         "💡 Suggestions",
+        "🔴 Logs erreurs",
     ])
 
     with admin_tabs[0]: section_dashboard(users)
@@ -657,3 +659,4 @@ def afficher_panel_admin_complet():
     with admin_tabs[4]: section_broadcast()
     with admin_tabs[5]: section_stats_ia()
     with admin_tabs[6]: section_suggestions_admin()
+    with admin_tabs[7]: section_logs_admin()

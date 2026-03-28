@@ -380,19 +380,74 @@ if CHARGE:
     tabs = st.tabs(onglets)
 
     with tabs[0]:
-        page_matchs_jour(modeles, df_base)
+        try:
+            page_matchs_jour(modeles, df_base)
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_matchs_jour", onglet="Matchs du jour",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Matchs du jour.")
+
     with tabs[1]:
-        page_prediction(modeles, df_base)
+        try:
+            page_prediction(modeles, df_base)
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_prediction", onglet="Prédiction",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Prédiction.")
+
     with tabs[2]:
-        page_joueurs(modeles, df_base)
+        try:
+            page_joueurs(modeles, df_base)
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_joueurs", onglet="Joueurs",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Joueurs.")
+
     with tabs[3]:
-        page_mise_a_jour(modeles, df_base)
+        try:
+            page_mise_a_jour(modeles, df_base)
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_mise_a_jour", onglet="Mise à jour",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Mise à jour.")
+
     with tabs[4]:
-        page_historique()
+        try:
+            page_historique()
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_historique", onglet="Historique",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Historique.")
+
     with tabs[5]:
-        page_performance()
+        try:
+            page_performance()
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_performance", onglet="Performance IA",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Performance IA.")
+
     with tabs[6]:
-        page_suggestions()
+        try:
+            page_suggestions()
+        except Exception as e:
+            from modules.logs import log_erreur
+            log_erreur(e, contexte="page_suggestions", onglet="Suggestions",
+                       uid=st.session_state.get("user",{}).get("uid",""),
+                       email=st.session_state.get("user",{}).get("email",""))
+            st.error("❌ Une erreur est survenue dans Suggestions.")
 
     # Admin (tab 7) + Premium (dernier tab)
     if is_admin():
