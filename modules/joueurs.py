@@ -4,6 +4,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 from rapidfuzz import process, fuzz
 import requests
 import os
@@ -179,6 +180,93 @@ def get_profil_joueur(nom, modeles, df_base):
         'grass_pct'   : forme_surf('Grass'),
         'derniers'    : derniers,
     }
+
+# ============================================================
+# CALCUL DES TENDANCES RÉCENTES
+# ============================================================
+def calculer_tendances(nom, modeles, df_base, nb_matchs=20):
+    if df_base is None or df_base.empty:
+        return None
+    mask = (
+        (df_base['winner_name'] == nom) |
+        (df_base['loser_name']  == nom)
+    )
+    matchs = df_base[mask].copy()
+    if matchs.empty:
+        return None
+    matchs['tourney_date'] = pd.to_datetime(matchs['tourney_date'], errors='coerce')
+    matchs = matchs.sort_values('tourney_date', ascending=False).reset_index(drop=True)
+    matchs = matchs.head(nb_matchs)
+
+    resultats = []
+    for _, row in matchs.iterrows():
+        gagne      = row['winner_name'] == nom
+        adversaire = row['loser_name'] if gagne else row['winner_name']
+        resultats.append({
+            'date'      : row['tourney_date'],
+            'gagne'     : gagne,
+            'surface'   : str(row.get('surface', 'Hard')),
+            'adversaire': str(adversaire),
+            'tournoi'   : str(row.get('tourney_name', 'N/A')),
+            'round'     : str(row.get('round', 'N/A')),
+            'score'     : str(row.get('score', 'N/A')),
+        })
+
+    if not resultats:
+        return None
+
+    total     = len(resultats)
+    victoires = sum(1 for r in resultats if r['gagne'])
+    pct_global = round(victoires / total * 100, 1)
+
+    recents    = resultats[:5]
+    precedents = resultats[5:10]
+    pct_recent = round(sum(1 for r in recents if r['gagne']) / len(recents) * 100, 1) if recents else 0
+    pct_prec   = round(sum(1 for r in precedents if r['gagne']) / len(precedents) * 100, 1) if precedents else 0
+    delta_forme = round(pct_recent - pct_prec, 1)
+
+    surfaces_stats = {}
+    for surf in ['Hard', 'Clay', 'Grass']:
+        m_surf = [r for r in resultats if r['surface'] == surf]
+        if m_surf:
+            v_surf = sum(1 for r in m_surf if r['gagne'])
+            surfaces_stats[surf] = {
+                'total': len(m_surf), 'victoires': v_surf,
+                'pct': round(v_surf / len(m_surf) * 100, 1)
+            }
+
+    serie = 0
+    serie_type = None
+    for r in resultats:
+        if serie_type is None:
+            serie_type = 'V' if r['gagne'] else 'D'
+            serie = 1
+        elif (r['gagne'] and serie_type == 'V') or (not r['gagne'] and serie_type == 'D'):
+            serie += 1
+        else:
+            break
+
+    courbe = []
+    for i in range(1, total + 1):
+        sous = resultats[:i]
+        courbe.append({
+            'match': i,
+            'pct'  : round(sum(1 for r in sous if r['gagne']) / i * 100, 1),
+            'label': '✅' if resultats[i-1]['gagne'] else '❌',
+            'adv'  : resultats[i-1]['adversaire'],
+            'surf' : resultats[i-1]['surface'],
+        })
+
+    meilleure_surf = max(surfaces_stats, key=lambda s: surfaces_stats[s]['pct'], default='N/A') if surfaces_stats else 'N/A'
+
+    return {
+        'total': total, 'victoires': victoires, 'pct_global': pct_global,
+        'pct_recent': pct_recent, 'pct_prec': pct_prec, 'delta_forme': delta_forme,
+        'serie': serie, 'serie_type': serie_type,
+        'surfaces': surfaces_stats, 'meilleure_surf': meilleure_surf,
+        'courbe': courbe, 'resultats': resultats,
+    }
+
 
 # ============================================================
 # AJOUT JOUEUR VIA API
@@ -429,6 +517,67 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 )
             else:
                 st.info("Aucun match trouvé")
+
+            # ── Tendances récentes ──
+            st.markdown("---")
+            st.subheader("📈 Tendances récentes")
+            col_sl, _ = st.columns([2, 3])
+            with col_sl:
+                nb_t = st.slider("Nombre de matchs analysés", min_value=5, max_value=50, value=20, step=5, key=f"slider_t_{joueur_sel}")
+            t = calculer_tendances(joueur_sel, modeles, df_base, nb_t)
+            if t is None:
+                st.warning("⚠️ Pas assez de données pour calculer les tendances.")
+            else:
+                col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+                with col_t1:
+                    st.metric(f"🏆 Bilan ({t['total']} matchs)",
+                        f"{t['victoires']}V / {t['total'] - t['victoires']}D", f"{t['pct_global']}%")
+                with col_t2:
+                    fleche = "⬆️" if t['delta_forme'] > 0 else ("⬇️" if t['delta_forme'] < 0 else "➡️")
+                    st.metric("📊 Forme (5 derniers)", f"{t['pct_recent']}%",
+                        f"{fleche} {t['delta_forme']:+.1f}% vs 5 précédents")
+                with col_t3:
+                    ic = "🟢" if t['serie_type'] == 'V' else "🔴"
+                    label_s = "Victoire(s)" if t['serie_type'] == 'V' else "Défaite(s)"
+                    st.metric("🔥 Série en cours", f"{ic} {t['serie']} {label_s}")
+                with col_t4:
+                    pct_ms = t['surfaces'].get(t['meilleure_surf'], {}).get('pct', 0)
+                    st.metric("🎯 Meilleure surface", t['meilleure_surf'], f"{pct_ms}% de victoires")
+
+                # Courbe de forme
+                st.markdown("**📉 Évolution du taux de victoire**")
+                couleurs = ['#2d9e56' if r['gagne'] else '#ef4444' for r in t['resultats']]
+                fig_t = go.Figure()
+                fig_t.add_trace(go.Scatter(
+                    x=[c['match'] for c in t['courbe']],
+                    y=[c['pct']   for c in t['courbe']],
+                    mode='lines+markers',
+                    line=dict(color='#4ade80', width=2),
+                    marker=dict(color=couleurs, size=10, line=dict(color='white', width=1)),
+                    hovertemplate='<b>Match %{x}</b><br>%{y:.1f}%<br>%{text}<extra></extra>',
+                    text=[f"{c['label']} {c['adv'][:15]} ({c['surf']})" for c in t['courbe']],
+                ))
+                fig_t.add_hline(y=50, line_dash='dot', line_color='rgba(255,255,255,0.3)', annotation_text='50%')
+                fig_t.update_layout(
+                    height=260, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white'), margin=dict(t=10, b=10),
+                    xaxis=dict(title='Matchs (récent → ancien)', gridcolor='rgba(255,255,255,0.05)'),
+                    yaxis=dict(title='% Victoires', range=[0, 105], gridcolor='rgba(255,255,255,0.1)'),
+                )
+                st.plotly_chart(fig_t, use_container_width=True)
+
+                # Stats par surface
+                if t['surfaces']:
+                    st.markdown("**🏟️ Performance par surface (sur ces matchs)**")
+                    surf_icons = {'Hard': '🏟️', 'Clay': '🌱', 'Grass': '🌿'}
+                    cols_surf = st.columns(len(t['surfaces']))
+                    for i, (surf, stats) in enumerate(t['surfaces'].items()):
+                        with cols_surf[i]:
+                            st.metric(f"{surf_icons.get(surf,'🎾')} {surf}",
+                                f"{stats['victoires']}V / {stats['total']-stats['victoires']}D",
+                                f"{stats['pct']}%",
+                                delta_color="normal" if stats['pct'] >= 50 else "inverse")
+                            st.progress(int(stats['pct']))
 
             st.markdown("---")
 
