@@ -1,0 +1,11 @@
+﻿BASE_FEATURES_BACKUP.csv
+BASE_FEATURES_BACKUP2.csv
+BASE_FEATURES_CLEAN.csv
+doublons_a_verifier.csv
+doublons_clairs.csv
+doublons_score25_analyses.csv
+doublons_valides.csv
+audit_*.py
+fix_*.py
+check_*.py
+voir_*.py
