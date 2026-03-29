@@ -3,10 +3,8 @@ title: Tennis IA
 emoji: 🎾
 colorFrom: green
 colorTo: blue
-sdk: streamlit
-sdk_version: "1.42.0"
-python_version: "3.10"
-app_file: app.py
+sdk: docker
+app_port: 7860
 pinned: false
 ---
 
