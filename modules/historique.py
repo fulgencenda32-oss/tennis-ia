@@ -92,29 +92,38 @@ def verifier_resultats_via_api(historique):
 # CONNEXION FIREBASE
 # ============================================================
 def get_firebase_db():
-    try:
-        import firebase_admin
-        from firebase_admin import credentials, firestore
+    """Connexion Firebase avec timeout de 5 secondes maximum."""
+    import threading
 
-        if not firebase_admin._apps:
-            # Option 1 : fichier local (PC)
-            chemin_cle = os.path.join(
-                os.path.dirname(__file__), '..', 'data', 'firebase_key.json'
-            )
-            if os.path.exists(chemin_cle):
-                cred = credentials.Certificate(chemin_cle)
-                firebase_admin.initialize_app(cred)
-            # Option 2 : secret HuggingFace
-            elif os.getenv('FIREBASE_KEY'):
-                cle_json = json.loads(os.getenv('FIREBASE_KEY'))
-                cred = credentials.Certificate(cle_json)
-                firebase_admin.initialize_app(cred)
-            else:
-                return None
+    result = [None]
 
-        return firestore.client()
-    except Exception as e:
-        return None
+    def _connecter():
+        try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore
+
+            if not firebase_admin._apps:
+                chemin_cle = os.path.join(
+                    os.path.dirname(__file__), '..', 'data', 'firebase_key.json'
+                )
+                if os.path.exists(chemin_cle):
+                    cred = credentials.Certificate(chemin_cle)
+                    firebase_admin.initialize_app(cred)
+                elif os.getenv('FIREBASE_KEY'):
+                    cle_json = json.loads(os.getenv('FIREBASE_KEY'))
+                    cred = credentials.Certificate(cle_json)
+                    firebase_admin.initialize_app(cred)
+                else:
+                    return
+
+            result[0] = firestore.client()
+        except Exception:
+            result[0] = None
+
+    t = threading.Thread(target=_connecter, daemon=True)
+    t.start()
+    t.join(timeout=5)  # timeout 5 secondes max
+    return result[0]
 
 # ============================================================
 # CHARGEMENT HISTORIQUE (Firebase + local)
@@ -123,16 +132,25 @@ def charger_historique():
     historique_firebase = []
     historique_local    = []
 
-    # Chargement Firebase
+    # Chargement Firebase avec timeout
     db = get_firebase_db()
     if db:
         try:
-            docs = db.collection('predictions').order_by(
-                'date', direction='DESCENDING'
-            ).limit(500).stream()
-            historique_firebase = [doc.to_dict() for doc in docs]
-        except:
-            pass
+            import concurrent.futures
+            def _fetch():
+                docs = db.collection('predictions').order_by(
+                    'date', direction='DESCENDING'
+                ).limit(500).stream()
+                return [doc.to_dict() for doc in docs]
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(_fetch)
+                try:
+                    historique_firebase = future.result(timeout=8)
+                except concurrent.futures.TimeoutError:
+                    historique_firebase = []
+        except Exception:
+            historique_firebase = []
 
     # Chargement local
     if os.path.exists(FICHIER_HISTORIQUE):

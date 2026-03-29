@@ -14,15 +14,41 @@ def page_performance():
     st.title("📊 Performance IA")
     st.markdown("---")
 
-    st.subheader("🎯 Précision des modèles sur 830 906 matchs")
+    # Charger les vraies stats depuis le modèle
+    acc_win   = 0.702
+    acc_sets  = 0.712
+    acc_handi = 0.699
+    nb_matchs = "832 355"
+    nb_joueurs = "25 333"
+    date_entr = "2026-03-27"
 
-    col1, col2, col3 = st.columns(3)
+    try:
+        import pickle, os
+        chemin = os.path.join(os.path.dirname(__file__), '..', 'data', 'modeles_tennis_v2.pkl')
+        if os.path.exists(chemin):
+            def simplifier_round(r): return 3
+            import __main__
+            __main__.simplifier_round = simplifier_round
+            with open(chemin, 'rb') as f:
+                m = pickle.load(f)
+            acc_win   = m.get('acc_win', acc_win)
+            acc_sets  = m.get('acc_sets', acc_sets)
+            acc_handi = m.get('acc_handi', acc_handi)
+            date_entr = m.get('date_entrainement', date_entr)
+            nb_joueurs = f"{len(m.get('elo_final', {})):,}"
+    except Exception:
+        pass
+
+    st.subheader("🎯 Précision des modèles")
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("🏆 Vainqueur", "67.8%", "Modèle XGBoost")
+        st.metric("🏆 Vainqueur", f"{acc_win*100:.1f}%", "XGBoost")
     with col2:
-        st.metric("🔢 Nb Sets", "70.9%", "Meilleur score")
+        st.metric("🔢 Nb Sets", f"{acc_sets*100:.1f}%", "XGBoost")
     with col3:
-        st.metric("⚖️ Handicap", "69.5%", "Sets gagnés")
+        st.metric("⚖️ Handicap", f"{acc_handi*100:.1f}%", "XGBoost")
+    with col4:
+        st.metric("📅 Entraîné le", str(date_entr)[:10])
 
     st.markdown("---")
 
