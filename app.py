@@ -361,24 +361,36 @@ if CHARGE:
     from modules.paiement       import page_paiement
     from modules.suggestions    import page_suggestions
 
-    # Onglets de base
-    onglets = [
-        "📅 Matchs du jour",
-        "🎾 Prédiction",
-        "👤 Joueurs",
-        "🔄 Mise à jour",
-        "📚 Historique",
-        "📊 Performance IA",
-        "💡 Suggestions",
-    ]
-
-    # Ajouter onglet Admin si c'est Fulgence N'da
+    # ============================================================
+    # ONGLETS — différenciés selon le rôle
+    # Admin    : voit tous les onglets (+ Mise à jour + Performance IA)
+    # Utilisateur : voit uniquement les onglets publics
+    # ============================================================
     if is_admin():
-        onglets.append("🛡️ Admin")
-    onglets.append("⭐ Premium")
+        onglets = [
+            "📅 Matchs du jour",   # 0
+            "🎾 Prédiction",        # 1
+            "👤 Joueurs",           # 2
+            "🔄 Mise à jour",       # 3  — admin uniquement
+            "📚 Historique",        # 4
+            "📊 Performance IA",    # 5  — admin uniquement
+            "💡 Suggestions",       # 6
+            "🛡️ Admin",             # 7
+            "⭐ Premium",           # 8
+        ]
+    else:
+        onglets = [
+            "📅 Matchs du jour",   # 0
+            "🎾 Prédiction",        # 1
+            "👤 Joueurs",           # 2
+            "📚 Historique",        # 3
+            "💡 Suggestions",       # 4
+            "⭐ Premium",           # 5
+        ]
 
     tabs = st.tabs(onglets)
 
+    # ── Onglets communs aux deux rôles ──────────────────────────
     with tabs[0]:
         try:
             page_matchs_jour(modeles, df_base)
@@ -409,54 +421,77 @@ if CHARGE:
                        email=st.session_state.get("user",{}).get("email",""))
             st.error("❌ Une erreur est survenue dans Joueurs.")
 
-    with tabs[3]:
-        try:
-            page_mise_a_jour(modeles, df_base)
-        except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_mise_a_jour", onglet="Mise à jour",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Mise à jour.")
-
-    with tabs[4]:
-        try:
-            page_historique()
-        except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_historique", onglet="Historique",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Historique.")
-
-    with tabs[5]:
-        try:
-            page_performance()
-        except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_performance", onglet="Performance IA",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Performance IA.")
-
-    with tabs[6]:
-        try:
-            page_suggestions()
-        except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_suggestions", onglet="Suggestions",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Suggestions.")
-
-    # Admin (tab 7) + Premium (dernier tab)
     if is_admin():
+        # ── Onglets réservés à l'admin ──────────────────────────
+        with tabs[3]:
+            try:
+                page_mise_a_jour(modeles, df_base)
+            except Exception as e:
+                from modules.logs import log_erreur
+                log_erreur(e, contexte="page_mise_a_jour", onglet="Mise à jour",
+                           uid=st.session_state.get("user",{}).get("uid",""),
+                           email=st.session_state.get("user",{}).get("email",""))
+                st.error("❌ Une erreur est survenue dans Mise à jour.")
+
+        with tabs[4]:
+            try:
+                page_historique()
+            except Exception as e:
+                from modules.logs import log_erreur
+                log_erreur(e, contexte="page_historique", onglet="Historique",
+                           uid=st.session_state.get("user",{}).get("uid",""),
+                           email=st.session_state.get("user",{}).get("email",""))
+                st.error("❌ Une erreur est survenue dans Historique.")
+
+        with tabs[5]:
+            try:
+                page_performance()
+            except Exception as e:
+                from modules.logs import log_erreur
+                log_erreur(e, contexte="page_performance", onglet="Performance IA",
+                           uid=st.session_state.get("user",{}).get("uid",""),
+                           email=st.session_state.get("user",{}).get("email",""))
+                st.error("❌ Une erreur est survenue dans Performance IA.")
+
+        with tabs[6]:
+            try:
+                page_suggestions()
+            except Exception as e:
+                from modules.logs import log_erreur
+                log_erreur(e, contexte="page_suggestions", onglet="Suggestions",
+                           uid=st.session_state.get("user",{}).get("uid",""),
+                           email=st.session_state.get("user",{}).get("email",""))
+                st.error("❌ Une erreur est survenue dans Suggestions.")
+
         with tabs[7]:
             afficher_panel_admin()
+
         with tabs[8]:
             page_paiement()
+
     else:
-        with tabs[7]:
+        # ── Suite onglets utilisateur (index décalé sans Mise à jour / Perf) ──
+        with tabs[3]:
+            try:
+                page_historique()
+            except Exception as e:
+                from modules.logs import log_erreur
+                log_erreur(e, contexte="page_historique", onglet="Historique",
+                           uid=st.session_state.get("user",{}).get("uid",""),
+                           email=st.session_state.get("user",{}).get("email",""))
+                st.error("❌ Une erreur est survenue dans Historique.")
+
+        with tabs[4]:
+            try:
+                page_suggestions()
+            except Exception as e:
+                from modules.logs import log_erreur
+                log_erreur(e, contexte="page_suggestions", onglet="Suggestions",
+                           uid=st.session_state.get("user",{}).get("uid",""),
+                           email=st.session_state.get("user",{}).get("email",""))
+                st.error("❌ Une erreur est survenue dans Suggestions.")
+
+        with tabs[5]:
             page_paiement()
 
     # Restaurer onglet actif via JavaScript

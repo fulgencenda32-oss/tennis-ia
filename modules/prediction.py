@@ -373,16 +373,56 @@ def predire_match(
         'cote_proba_B'  : proba_bk_b,
     }])[FEATURES].fillna(0).astype('float32')
 
-    # Prédictions
-    # Choisir le modèle spécialisé si disponible pour cette surface
-    surf_key = 'Hard' if 'hard' in surface.lower() else ('Clay' if 'clay' in surface.lower() else ('Grass' if 'grass' in surface.lower() else 'Hard'))
-    modele_surf_spec = modeles_surf.get(surf_key) if modeles_surf else None
-    modele_actif = modele_surf_spec if modele_surf_spec is not None else modele_win
+    # ── Détermination surface clé ──────────────────────────────
+    surf_key = (
+        'Hard'  if 'hard'  in surface.lower() else
+        'Clay'  if 'clay'  in surface.lower() else
+        'Grass' if 'grass' in surface.lower() else
+        'Hard'
+    )
 
-    proba_a    = float(modele_actif.predict_proba(X)[0][1])
+    # ── Probas des 4 IA ────────────────────────────────────────
+    # On calcule les 4 probas dans tous les cas :
+    # - elles alimentent l'IA Suprême si disponible
+    # - elles sont affichées dans l'interface (détail consensus)
+    modele_surf_spec = modeles_surf.get(surf_key) if modeles_surf else None
+
+    p_gen   = float(modele_win.predict_proba(X)[0][1])
+    p_clay  = float(modeles_surf['Clay'].predict_proba(X)[0][1])  if modeles_surf and 'Clay'  in modeles_surf else p_gen
+    p_hard  = float(modeles_surf['Hard'].predict_proba(X)[0][1])  if modeles_surf and 'Hard'  in modeles_surf else p_gen
+    p_grass = float(modeles_surf['Grass'].predict_proba(X)[0][1]) if modeles_surf and 'Grass' in modeles_surf else p_gen
+
+    consensus_score = max(p_gen, p_clay, p_hard, p_grass) - min(p_gen, p_clay, p_hard, p_grass)
+
+    # ── IA Suprême ─────────────────────────────────────────────
+    # Si disponible dans le pkl → elle combine les 4 probas
+    # intelligemment selon le contexte (surface, ELO, consensus).
+    # Sinon → fallback sur l'IA spécialisée ou générale.
+    ia_supreme    = modeles.get('ia_supreme')
+    features_meta = modeles.get('features_meta')
+
+    if ia_supreme is not None and features_meta is not None:
+        X_meta = pd.DataFrame([{
+            'proba_generale'    : p_gen,
+            'proba_clay'        : p_clay,
+            'proba_hard'        : p_hard,
+            'proba_grass'       : p_grass,
+            'surface_code'      : surface_map.get(surface, 4),
+            'elo_diff'          : elo_a - elo_b,
+            'rank_diff'         : rank_b - rank_a,
+            'consensus_score'   : consensus_score,
+            'surface_ia_active' : int(surf_key in (modeles_surf or {})),
+        }])[features_meta].fillna(0).astype('float32')
+        proba_a        = float(ia_supreme.predict_proba(X_meta)[0][1])
+        modele_utilise = f"IA Suprême · {surf_key}"
+    else:
+        # Fallback : comportement identique à l'ancienne version
+        modele_actif   = modele_surf_spec if modele_surf_spec is not None else modele_win
+        proba_a        = float(modele_actif.predict_proba(X)[0][1])
+        modele_utilise = f"Spécialisé {surf_key}" if modele_surf_spec is not None else "Général"
+
     nb_sets_p  = int(modele_sets.predict(X)[0]) + 2
     handicap_p = int(modele_handi.predict(X)[0]) + 1
-    modele_utilise = f"Spécialisé {surf_key}" if modele_surf_spec is not None else "Général" 
 
     # Score exact — utilise scores realistes varies
     scores_2sets = [
@@ -413,6 +453,64 @@ def predire_match(
         score_exact = random.choice(scores_3sets)
     else:
         score_exact = random.choice(scores_5sets)
+
+    # ============================================================
+    # DÉTECTION D'ABSTENTION
+    # L'IA affiche quand même la prédiction mais signale les risques.
+    # Chaque anomalie ajoute un message + réduit le score de confiance.
+    # ============================================================
+    anomalies = []
+
+    # 1. Joueur peu connu — moins de 10 matchs en base
+    if df_base is not None:
+        nb_matchs_a = len(df_base[
+            (df_base['winner_name'] == joueur_a) |
+            (df_base['loser_name']  == joueur_a)
+        ])
+        nb_matchs_b = len(df_base[
+            (df_base['winner_name'] == joueur_b) |
+            (df_base['loser_name']  == joueur_b)
+        ])
+        if nb_matchs_a < 10:
+            anomalies.append(f"⚠️ {joueur_a} a seulement {nb_matchs_a} match(s) en base — données insuffisantes")
+        if nb_matchs_b < 10:
+            anomalies.append(f"⚠️ {joueur_b} a seulement {nb_matchs_b} match(s) en base — données insuffisantes")
+
+    # 2. Désaccord fort entre IA spécialisées (consensus > 25%)
+    if consensus_score > 0.25:
+        anomalies.append(
+            f"⚠️ Désaccord fort entre les IA ({round(consensus_score*100)}%) "
+            f"— résultat imprévisible, mise réduite conseillée"
+        )
+
+    # 3. Joueur sans expérience sur cette surface
+    if df_base is not None:
+        surf_clean = surface.split()[0]  # "Clay (Indoor)" → "Clay"
+        matchs_surf_a = len(df_base[
+            ((df_base['winner_name'] == joueur_a) | (df_base['loser_name'] == joueur_a)) &
+            (df_base['surface'].astype(str).str.contains(surf_clean, case=False, na=False))
+        ])
+        matchs_surf_b = len(df_base[
+            ((df_base['winner_name'] == joueur_b) | (df_base['loser_name'] == joueur_b)) &
+            (df_base['surface'].astype(str).str.contains(surf_clean, case=False, na=False))
+        ])
+        if matchs_surf_a < 5:
+            anomalies.append(f"⚠️ {joueur_a} : seulement {matchs_surf_a} match(s) sur {surface} en base")
+        if matchs_surf_b < 5:
+            anomalies.append(f"⚠️ {joueur_b} : seulement {matchs_surf_b} match(s) sur {surface} en base")
+
+    # 4. ELO et ranking contradictoires
+    # (joueur bien classé mais ELO faible = blessure récente ou données obsolètes)
+    elo_diff_abs  = abs(elo_a - elo_b)
+    rank_diff_abs = abs(rank_a - rank_b)
+    if rank_diff_abs > 200 and elo_diff_abs < 50:
+        anomalies.append(
+            f"⚠️ Ranking ({round(rank_diff_abs)} places d'écart) et ELO ({round(elo_diff_abs)} pts) "
+            f"sont contradictoires — données potentiellement obsolètes"
+        )
+
+    # Score d'abstention : True si au moins 2 anomalies graves
+    abstention = len(anomalies) >= 2
 
     # Ajustement domicile
     bonus_a = domicile_a * 0.02   # +2% ou +4%
@@ -487,6 +585,16 @@ def predire_match(
         'value_bet_info' : value_bet_info,
         'cotes_fournies' : cote_a is not None,
         'date'           : datetime.now().strftime('%Y-%m-%d %H:%M'),
+        # Mode Abstention
+        'abstention'     : abstention,
+        'anomalies'      : anomalies,
+        # IA Suprême — détail des probas par surface (pour affichage consensus)
+        'ia_supreme_active' : ia_supreme is not None,
+        'proba_gen'         : round(p_gen   * 100, 1),
+        'proba_clay'        : round(p_clay  * 100, 1),
+        'proba_hard'        : round(p_hard  * 100, 1),
+        'proba_grass'       : round(p_grass * 100, 1),
+        'consensus_score'   : round(consensus_score * 100, 1),
         # Score de confiance
         'confiance'      : _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h2h, rank_a, rank_b),
         # Over/Under sets 2.5 — Modèle IA
@@ -1054,6 +1162,26 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
+            st.markdown("---")
+
+            # ── Mode Abstention ────────────────────────────────
+            if res.get('anomalies'):
+                if res.get('abstention'):
+                    # Abstention forte — 2+ anomalies
+                    st.error(
+                        "⛔ **L'IA Suprême déconseille ce match**\n\n"
+                        "La prédiction est affichée ci-dessous mais la fiabilité est très réduite. "
+                        "Évitez de miser sur ce match."
+                    )
+                else:
+                    # Avertissement simple — 1 anomalie
+                    st.warning("⚠️ **Prédiction à interpréter avec prudence**")
+
+                # Détail des anomalies dans un expander
+                with st.expander("🔍 Voir les raisons", expanded=res.get('abstention', False)):
+                    for msg in res['anomalies']:
+                        st.markdown(f"- {msg}")
+
             # ── Résultats ──
             col_v1, col_v2, col_v3, col_v4 = st.columns(4)
             with col_v1:
@@ -1077,7 +1205,34 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            # ── Statistiques comparées ──
+            # ── Consensus IA Suprême ──
+            if res.get('ia_supreme_active'):
+                cons = res.get('consensus_score', 0)
+                if cons < 10:
+                    cons_emoji  = "🟢"
+                    cons_label  = "CONSENSUS FORT — Prédiction très fiable"
+                    cons_color  = "success"
+                elif cons < 25:
+                    cons_emoji  = "🟡"
+                    cons_label  = "CONSENSUS MOYEN — Prédiction fiable"
+                    cons_color  = "warning"
+                else:
+                    cons_emoji  = "🔴"
+                    cons_label  = "DÉSACCORD — Match imprévisible"
+                    cons_color  = "error"
+
+                with st.expander(f"{cons_emoji} IA Suprême · {cons_label}", expanded=True):
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("🌍 Générale",  f"{res.get('proba_gen',  0)}%")
+                    c2.metric("🔴 Clay",       f"{res.get('proba_clay', 0)}%")
+                    c3.metric("🔵 Hard",       f"{res.get('proba_hard', 0)}%")
+                    c4.metric("💚 Grass",      f"{res.get('proba_grass',0)}%")
+                    st.caption(
+                        f"Écart entre IA : **{cons}%** · "
+                        f"Modèle utilisé : **{res.get('modele_utilise', '—')}**"
+                    )
+
+            st.markdown("---")
             col_d1, col_d2 = st.columns(2)
             with col_d1:
                 st.markdown("**📊 Statistiques comparées**")
