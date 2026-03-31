@@ -1,7 +1,6 @@
 # ============================================================
 # RÉENTRAÎNEMENT HEBDOMADAIRE — Tennis IA
 # Version COMPLÈTE avec toutes les variables psychologiques
-# + IA Spécialisées par surface (Clay, Hard, Grass)
 # Lancez ce script une fois par semaine sur votre PC
 # ============================================================
 import pandas as pd
@@ -450,31 +449,21 @@ X_A = df_A[FEATURES].fillna(0).astype('float32')
 y_A = pd.Series([1]*len(X_A), dtype=int)
 X_B = df_B[FEATURES].fillna(0).astype('float32')
 y_B = pd.Series([0]*len(X_B), dtype=int)
-
-# === GARDER df_A et df_B pour les IA spécialisées ===
-df_A_surface = df_A[['surface']].copy()
-df_B_surface = df_B[['surface']].copy()
-
 del df_A, df_B
 gc.collect()
 
 X_sym = pd.concat([X_A, X_B], ignore_index=True)
 y_sym = pd.concat([y_A, y_B], ignore_index=True)
-surface_sym = pd.concat([df_A_surface, df_B_surface], ignore_index=True)
-
-del X_A, X_B, y_A, y_B, df_A_surface, df_B_surface
+del X_A, X_B, y_A, y_B
 gc.collect()
 
 idx = np.random.default_rng(42).permutation(len(X_sym))
 X_sym = X_sym.iloc[idx].reset_index(drop=True)
 y_sym = y_sym.iloc[idx].reset_index(drop=True)
-surface_sym = surface_sym.iloc[idx].reset_index(drop=True)
 gc.collect()
 
-X_tr, X_te, y_tr, y_te, surf_tr, surf_te = train_test_split(
-    X_sym, y_sym, surface_sym, test_size=0.2, random_state=42, stratify=y_sym
-)
-del X_sym, y_sym, surface_sym
+X_tr, X_te, y_tr, y_te = train_test_split(X_sym, y_sym, test_size=0.2, random_state=42, stratify=y_sym)
+del X_sym, y_sym
 gc.collect()
 
 # ============================================================
@@ -576,83 +565,6 @@ modele_handi.fit(X_tr_h, y_tr_h, verbose=False)
 acc_handi = accuracy_score(y_te_h+1, modele_handi.predict(X_te_h)+1)
 print(f"   ✅ Précision : {acc_handi*100:.1f}%")
 
-# ============================================================
-# ÉTAPE 6B — IA SPÉCIALISÉES PAR SURFACE (Clay, Hard, Grass)
-# ============================================================
-print("\n" + "=" * 60)
-print("🌍 ENTRAÎNEMENT IA SPÉCIALISÉES PAR SURFACE")
-print("=" * 60)
-
-SURFACES_SPECIALISEES = {
-    'Clay':  ['Clay', 'Clay (Indoor)'],
-    'Hard':  ['Hard', 'Hard (Indoor)'],
-    'Grass': ['Grass'],
-}
-
-SEUIL_MIN_MATCHS = 500
-modeles_surf = {}
-acc_surf = {}
-
-# Mapping surface_enc inversé pour filtrer
-surface_map_inv = {v: k for k, v in surface_map.items()}
-
-for surf_nom, surf_variantes in SURFACES_SPECIALISEES.items():
-    print(f"\n🎾 IA {surf_nom}...")
-
-    # Récupérer les codes surface_enc correspondants
-    codes_surface = [surface_map[s] for s in surf_variantes if s in surface_map]
-
-    # Filtrer train et test par surface
-    mask_tr = surf_tr['surface'].isin(surf_variantes)
-    mask_te = surf_te['surface'].isin(surf_variantes)
-
-    X_tr_surf = X_tr[mask_tr.values].reset_index(drop=True)
-    y_tr_surf = y_tr[mask_tr.values].reset_index(drop=True)
-    X_te_surf = X_te[mask_te.values].reset_index(drop=True)
-    y_te_surf = y_te[mask_te.values].reset_index(drop=True)
-
-    nb_train = len(X_tr_surf)
-    nb_test  = len(X_te_surf)
-    print(f"   📊 {nb_train:,} matchs train / {nb_test:,} matchs test")
-
-    if nb_train < SEUIL_MIN_MATCHS:
-        print(f"   ⚠️ Pas assez de matchs (minimum {SEUIL_MIN_MATCHS}) → SKIP")
-        continue
-
-    if nb_test < 50:
-        print(f"   ⚠️ Pas assez de matchs test ({nb_test}) → SKIP")
-        continue
-
-    # Entraînement avec mêmes hyperparamètres que le modèle général
-    modele_surf = XGBClassifier(
-        n_estimators=300, max_depth=6, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8,
-        eval_metric='logloss', random_state=42, n_jobs=-1
-    )
-
-    # Pondération spécialisée (extraire les poids correspondants)
-    if sample_weights_info != "uniforme":
-        weights_surf = sample_weights_train[mask_tr.values]
-    else:
-        weights_surf = None
-
-    modele_surf.fit(X_tr_surf, y_tr_surf, sample_weight=weights_surf, verbose=False)
-
-    acc_s = accuracy_score(y_te_surf, modele_surf.predict(X_te_surf))
-    modeles_surf[surf_nom] = modele_surf
-    acc_surf[surf_nom] = acc_s
-
-    # Comparaison avec le modèle général sur les mêmes données de test
-    acc_gen_sur_surf = accuracy_score(y_te_surf, modele_win.predict(X_te_surf))
-    delta = (acc_s - acc_gen_sur_surf) * 100
-
-    if delta >= 0:
-        print(f"   ✅ Précision : {acc_s*100:.1f}% (vs Générale {acc_gen_sur_surf*100:.1f}% → {delta:+.1f}%) → DÉPLOYÉ")
-    else:
-        print(f"   ⚠️ Précision : {acc_s*100:.1f}% (vs Générale {acc_gen_sur_surf*100:.1f}% → {delta:+.1f}%) → DÉPLOYÉ quand même (spécialisation)")
-
-print(f"\n   📦 {len(modeles_surf)} IA spécialisées créées : {list(modeles_surf.keys())}")
-
 # Dictionnaire scores
 print("\n📚 Dictionnaire scores...")
 def parser_score_str(score_str):
@@ -694,8 +606,6 @@ modeles_complets = {
     'modele_win'   : modele_win,
     'modele_sets'  : modele_sets,
     'modele_handi' : modele_handi,
-    'modeles_surf' : modeles_surf,
-    'acc_surf'     : acc_surf,
     'features'     : FEATURES,
     'simplifier_round' : simplifier_round,
     'dico_scores'      : dico_scores,
@@ -735,7 +645,7 @@ try:
         path_or_fileobj=FICHIER_MODELE,
         path_in_repo='data/modeles_tennis_v2.pkl',
         repo_id=HF_REPO_SPACE, repo_type='space', token=HF_TOKEN,
-        commit_message=f'Reentrainement {datetime.now().strftime("%Y-%m-%d")} Win:{acc_win*100:.1f}% Surf:{list(modeles_surf.keys())} {sample_weights_info}'
+        commit_message=f'Reentrainement {datetime.now().strftime("%Y-%m-%d")} Win:{acc_win*100:.1f}% {sample_weights_info}'
     )
     print("   ✅ Modèle uploadé sur HuggingFace Space")
     api.upload_file(
@@ -759,8 +669,6 @@ print(f"  Nouveaux ajoutés   : {nb_nouveaux}")
 print(f"  Vainqueur          : {acc_win*100:.1f}%")
 print(f"  Nb Sets            : {acc_sets*100:.1f}%")
 print(f"  Handicap           : {acc_handi*100:.1f}%")
-for s, a in acc_surf.items():
-    print(f"  IA {s:15s} : {a*100:.1f}%")
 print(f"  Joueurs avec ELO   : {len(elo_final):,}")
 print(f"  Variables          : {len(FEATURES)} features")
 print(f"  Mode               : {sample_weights_info}")

@@ -1,0 +1,40 @@
+import pandas as pd
+import pickle
+from xgboost import XGBClassifier
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import cross_val_score
+
+# Charger le dataset méta
+df_meta = pd.read_csv('meta_dataset.csv')
+
+FEATURES_META = [
+    'proba_generale', 'proba_clay', 'proba_hard', 'proba_grass',
+    'surface_code', 'elo_diff', 'rank_diff',
+    'consensus_score', 'surface_ia_active'
+]
+
+X_meta = df_meta[FEATURES_META]
+y_meta = df_meta['winner']
+
+# Méta-modèle
+ia_supreme = CalibratedClassifierCV(
+    XGBClassifier(
+        n_estimators=200,
+        max_depth=3,
+        learning_rate=0.05,
+        subsample=0.8,
+        use_label_encoder=False,
+        eval_metric='logloss',
+        random_state=42
+    ),
+    method='isotonic', cv=5
+)
+
+# Entraînement
+ia_supreme.fit(X_meta, y_meta)
+
+# Sauvegarde
+with open('ia_supreme.pkl', 'wb') as f:
+    pickle.dump(ia_supreme, f)
+
+print("IA Suprême sauvegardée dans ia_supreme.pkl")

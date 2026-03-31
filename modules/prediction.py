@@ -1,4 +1,3 @@
-
 # Dictionnaire alias noms joueurs
 ALIAS_JOUEURS = {
     "Taylor Harry Fritz": "T. Fritz",
@@ -53,10 +52,8 @@ import plotly.graph_objects as go
 # DICTIONNAIRE PAYS — Tournoi → Code IOC
 # ============================================================
 PAYS_TOURNOI = {
-    # Grand Chelem
     'australian open': 'AUS', 'roland garros': 'FRA', 'french open': 'FRA',
     'wimbledon': 'GBR', 'us open': 'USA',
-    # Masters 1000 / WTA 1000
     'indian wells': 'USA', 'miami': 'USA', 'monte carlo': 'MON',
     'madrid': 'ESP', 'rome': 'ITA', 'canadian open': 'CAN',
     'toronto': 'CAN', 'montreal': 'CAN', 'cincinnati': 'USA',
@@ -80,7 +77,6 @@ PAYS_TOURNOI = {
     'umag': 'CRO', 'kitzbuhel': 'AUT', 'gstaad': 'SUI',
 }
 
-# Pays voisins / culturellement proches (bonus réduit)
 PAYS_VOISINS = {
     'FRA': ['MON', 'BEL', 'SUI'], 'ESP': ['POR', 'MON'],
     'GER': ['AUT', 'SUI'], 'SUI': ['AUT', 'GER', 'FRA'],
@@ -89,10 +85,6 @@ PAYS_VOISINS = {
 }
 
 def detecter_domicile(joueur_ioc, tournoi_nom):
-    """
-    Retourne le bonus domicile :
-    +2 = domicile direct, +1 = pays voisin, 0 = neutre
-    """
     if not joueur_ioc or not tournoi_nom:
         return 0
     tournoi_lower = tournoi_nom.lower()
@@ -148,7 +140,6 @@ def get_api_key():
     return [c for c in cles if c]
 
 def recherche_api_joueur(nom):
-    """Recherche un joueur via API avec rotation intelligente des clés."""
     from modules.api_rotation import appel_api
     from datetime import datetime, timedelta
 
@@ -183,10 +174,8 @@ def recherche_api_joueur(nom):
 def recherche_floue(nom, liste_joueurs, limite=5, seuil=55):
     if not nom or len(nom) < 2:
         return []
-    # Recherche directe
     resultats = process.extract(nom, liste_joueurs, scorer=fuzz.WRatio, limit=limite)
     bons = [(j, s) for j, s, _ in resultats if s >= seuil]
-    # Si pas assez de resultats, chercher par nom de famille
     if len(bons) < 3:
         mots = nom.strip().split()
         for mot in mots:
@@ -212,10 +201,9 @@ def predire_match(
     modele_win        = modeles['modele_win']
     modele_sets       = modeles['modele_sets']
     modele_handi      = modeles['modele_handi']
-    # Modèles spécialisés par surface
     modeles_surf      = modeles.get('modeles_surf', {})
     modele_ou_sets    = modeles.get('modele_ou_sets', None)
-    modele_ou_jeux    = modeles.get('modele_jeux', None)  # clé correcte dans le pkl
+    modele_ou_jeux    = modeles.get('modele_jeux', None)
     FEATURES         = modeles['features']
     elo_final        = modeles['elo_final']
     elo_surf         = modeles['elo_final_surf']
@@ -239,7 +227,7 @@ def predire_match(
     elo_a_surf = elo_surf.get(surface, {}).get(joueur_a, 1500.0)
     elo_b_surf = elo_surf.get(surface, {}).get(joueur_b, 1500.0)
 
-    # Classement — consulte classements.json en priorite
+    # Classement
     import json as _json
     _classements_cache = {}
     try:
@@ -274,7 +262,6 @@ def predire_match(
                 return r
         return 500
 
-
     rank_a = get_rank(joueur_a)
     rank_b = get_rank(joueur_b)
 
@@ -292,7 +279,7 @@ def predire_match(
     domicile_a = detecter_domicile(ioc_a, tournoi)
     domicile_b = detecter_domicile(ioc_b, tournoi)
 
-    # Nouvelles variables psychologiques
+    # Variables psychologiques
     comeback_a   = float(comeback_final.get(joueur_a, 0.3))
     comeback_b   = float(comeback_final.get(joueur_b, 0.3))
     clutch_a     = float(clutch_final.get(joueur_a, 0.5))
@@ -301,12 +288,10 @@ def predire_match(
     bigmatch_b   = float(bigmatch_final.get(joueur_b, 0.5))
     dominance_a  = float(dominance_final.get(joueur_a, 0.0))
     dominance_b  = float(dominance_final.get(joueur_b, 0.0))
-    # Historique sur ce tournoi
     t_key = tournoi.lower()[:30]
     hist_t_a = float(tournoi_hist_fin.get(joueur_a, {}).get(t_key, 0.5))
     hist_t_b = float(tournoi_hist_fin.get(joueur_b, {}).get(t_key, 0.5))
-    # Revanche factor (défaite récente contre cet adversaire)
-    revanche_a = 1.0  # neutre par défaut
+    revanche_a = 1.0
     revanche_b = 1.0
 
     # H2H
@@ -319,9 +304,7 @@ def predire_match(
         )
         h2h_matchs = df_base[mask_h2h]
         total_h2h  = len(h2h_matchs)
-        wins_a     = len(
-            h2h_matchs[h2h_matchs['winner_name'] == joueur_a]
-        )
+        wins_a     = len(h2h_matchs[h2h_matchs['winner_name'] == joueur_a])
     else:
         total_h2h = 0
         wins_a    = 0
@@ -347,7 +330,7 @@ def predire_match(
     genre_enc   = 1 if tournoi == 'WTA' else 0
     round_num   = simplifier_round(round_match)
 
-    # Features
+    # Features (22 variables)
     X = pd.DataFrame([{
         'elo_diff'      : elo_a - elo_b,
         'elo_diff_surf' : elo_a_surf - elo_b_surf,
@@ -373,7 +356,7 @@ def predire_match(
         'cote_proba_B'  : proba_bk_b,
     }])[FEATURES].fillna(0).astype('float32')
 
-    # ── Détermination surface clé ──────────────────────────────
+    # ── Détermination surface clé ──
     surf_key = (
         'Hard'  if 'hard'  in surface.lower() else
         'Clay'  if 'clay'  in surface.lower() else
@@ -381,10 +364,7 @@ def predire_match(
         'Hard'
     )
 
-    # ── Probas des 4 IA ────────────────────────────────────────
-    # On calcule les 4 probas dans tous les cas :
-    # - elles alimentent l'IA Suprême si disponible
-    # - elles sont affichées dans l'interface (détail consensus)
+    # ── Probas des 4 IA ──
     modele_surf_spec = modeles_surf.get(surf_key) if modeles_surf else None
 
     p_gen   = float(modele_win.predict_proba(X)[0][1])
@@ -394,29 +374,57 @@ def predire_match(
 
     consensus_score = max(p_gen, p_clay, p_hard, p_grass) - min(p_gen, p_clay, p_hard, p_grass)
 
-    # ── IA Suprême ─────────────────────────────────────────────
-    # Si disponible dans le pkl → elle combine les 4 probas
-    # intelligemment selon le contexte (surface, ELO, consensus).
-    # Sinon → fallback sur l'IA spécialisée ou générale.
-    ia_supreme    = modeles.get('ia_supreme')
-    features_meta = modeles.get('features_meta')
+    # ── IA SUPRÊME ─────────────────────────────────────────────
+    # Charge le méta-modèle calibré depuis le PKL
+    # Construit dynamiquement les meta-features selon ce qui a été entraîné
+    # ───────────────────────────────────────────────────────────
+    meta_model    = modeles.get('meta_model')
+    meta_features = modeles.get('meta_features')
 
-    if ia_supreme is not None and features_meta is not None:
-        X_meta = pd.DataFrame([{
-            'proba_generale'    : p_gen,
-            'proba_clay'        : p_clay,
-            'proba_hard'        : p_hard,
-            'proba_grass'       : p_grass,
-            'surface_code'      : surface_map.get(surface, 4),
-            'elo_diff'          : elo_a - elo_b,
-            'rank_diff'         : rank_b - rank_a,
-            'consensus_score'   : consensus_score,
-            'surface_ia_active' : int(surf_key in (modeles_surf or {})),
-        }])[features_meta].fillna(0).astype('float32')
-        proba_a        = float(ia_supreme.predict_proba(X_meta)[0][1])
-        modele_utilise = f"IA Suprême · {surf_key}"
+    if meta_model is not None and meta_features is not None:
+        # Proba du spécialiste selon la surface du match
+        _surf_proba_map = {
+            'Clay': p_clay, 'Clay (Indoor)': p_clay,
+            'Hard': p_hard, 'Hard (Indoor)': p_hard,
+            'Grass': p_grass, 'Carpet': p_hard, 'Unknown': p_hard,
+        }
+        p_spec = _surf_proba_map.get(surface, p_hard)
+        _probas = [p_gen, p_clay, p_hard, p_grass]
+
+        # Dictionnaire de TOUTES les meta-features possibles
+        # Le code sélectionne automatiquement celles utilisées à l'entraînement
+        _all_meta = {
+            'proba_generale':         p_gen,
+            'proba_clay':             p_clay,
+            'proba_hard':             p_hard,
+            'proba_grass':            p_grass,
+            'surface_enc':            surf_enc,
+            'proba_specialiste':      p_spec,
+            'proba_max':              max(_probas),
+            'proba_min':              min(_probas),
+            'proba_mean':             float(np.mean(_probas)),
+            'proba_std':              float(np.std(_probas)),
+            'ecart_clay_gen':         p_clay - p_gen,
+            'ecart_hard_gen':         p_hard - p_gen,
+            'ecart_grass_gen':        p_grass - p_gen,
+            'ecart_specialiste_gen':  p_spec - p_gen,
+            'ecart_gen_spec':         p_gen - p_spec,
+            'ecart_max':              max(_probas) - min(_probas),
+            'confiance_generale':     abs(p_gen - 0.5),
+            'confiance_specialiste':  abs(p_spec - 0.5),
+            'consensus':              float(all(p > 0.5 for p in _probas) or all(p <= 0.5 for p in _probas)),
+            'consensus_std':          float(np.std(_probas)),
+            'moyenne_probas':         float(np.mean(_probas)),
+            'accord_gen_spec':        float((p_gen > 0.5) == (p_spec > 0.5)),
+        }
+
+        X_meta = pd.DataFrame([{f: _all_meta.get(f, 0.0) for f in meta_features}])
+        X_meta = X_meta[meta_features].fillna(0).astype('float32')
+
+        proba_a        = float(meta_model.predict_proba(X_meta)[0][1])
+        modele_utilise = f"👑 IA Suprême · {surf_key}"
     else:
-        # Fallback : comportement identique à l'ancienne version
+        # Fallback : IA spécialisée ou générale
         modele_actif   = modele_surf_spec if modele_surf_spec is not None else modele_win
         proba_a        = float(modele_actif.predict_proba(X)[0][1])
         modele_utilise = f"Spécialisé {surf_key}" if modele_surf_spec is not None else "Général"
@@ -424,7 +432,7 @@ def predire_match(
     nb_sets_p  = int(modele_sets.predict(X)[0]) + 2
     handicap_p = int(modele_handi.predict(X)[0]) + 1
 
-    # Score exact — utilise scores realistes varies
+    # Score exact
     scores_2sets = [
         '6-4 6-3', '6-3 6-4', '6-2 6-4', '6-4 6-2',
         '7-5 6-3', '6-3 6-2', '7-6 6-4', '6-1 6-3',
@@ -454,14 +462,9 @@ def predire_match(
     else:
         score_exact = random.choice(scores_5sets)
 
-    # ============================================================
-    # DÉTECTION D'ABSTENTION
-    # L'IA affiche quand même la prédiction mais signale les risques.
-    # Chaque anomalie ajoute un message + réduit le score de confiance.
-    # ============================================================
+    # ── Détection d'abstention ──
     anomalies = []
 
-    # 1. Joueur peu connu — moins de 10 matchs en base
     if df_base is not None:
         nb_matchs_a = len(df_base[
             (df_base['winner_name'] == joueur_a) |
@@ -476,16 +479,14 @@ def predire_match(
         if nb_matchs_b < 10:
             anomalies.append(f"⚠️ {joueur_b} a seulement {nb_matchs_b} match(s) en base — données insuffisantes")
 
-    # 2. Désaccord fort entre IA spécialisées (consensus > 25%)
     if consensus_score > 0.25:
         anomalies.append(
             f"⚠️ Désaccord fort entre les IA ({round(consensus_score*100)}%) "
             f"— résultat imprévisible, mise réduite conseillée"
         )
 
-    # 3. Joueur sans expérience sur cette surface
     if df_base is not None:
-        surf_clean = surface.split()[0]  # "Clay (Indoor)" → "Clay"
+        surf_clean = surface.split()[0]
         matchs_surf_a = len(df_base[
             ((df_base['winner_name'] == joueur_a) | (df_base['loser_name'] == joueur_a)) &
             (df_base['surface'].astype(str).str.contains(surf_clean, case=False, na=False))
@@ -499,8 +500,6 @@ def predire_match(
         if matchs_surf_b < 5:
             anomalies.append(f"⚠️ {joueur_b} : seulement {matchs_surf_b} match(s) sur {surface} en base")
 
-    # 4. ELO et ranking contradictoires
-    # (joueur bien classé mais ELO faible = blessure récente ou données obsolètes)
     elo_diff_abs  = abs(elo_a - elo_b)
     rank_diff_abs = abs(rank_a - rank_b)
     if rank_diff_abs > 200 and elo_diff_abs < 50:
@@ -509,11 +508,10 @@ def predire_match(
             f"sont contradictoires — données potentiellement obsolètes"
         )
 
-    # Score d'abstention : True si au moins 2 anomalies graves
     abstention = len(anomalies) >= 2
 
     # Ajustement domicile
-    bonus_a = domicile_a * 0.02   # +2% ou +4%
+    bonus_a = domicile_a * 0.02
     bonus_b = domicile_b * 0.02
     proba_a_adj = min(0.97, max(0.03, proba_a + bonus_a - bonus_b))
 
@@ -521,25 +519,39 @@ def predire_match(
     proba_v   = proba_a_adj if proba_a_adj >= 0.5 else 1 - proba_a_adj
     proba_a   = proba_a_adj
 
-    # Value bet — verifier les deux joueurs independamment
+    # Value bet
     value_bet_info = []
     if cote_a and cote_b and cote_a > 1 and cote_b > 1:
         if proba_a > (1 / cote_a):
             valeur = proba_a * cote_a - 1
             value_bet_info.append({
-                'joueur' : joueur_a,
-                'cote'   : cote_a,
+                'joueur' : joueur_a, 'cote' : cote_a,
                 'proba'  : round(proba_a * 100, 1),
                 'valeur' : round(valeur * 100, 1)
             })
         if (1 - proba_a) > (1 / cote_b):
             valeur = (1 - proba_a) * cote_b - 1
             value_bet_info.append({
-                'joueur' : joueur_b,
-                'cote'   : cote_b,
+                'joueur' : joueur_b, 'cote' : cote_b,
                 'proba'  : round((1 - proba_a) * 100, 1),
                 'valeur' : round(valeur * 100, 1)
             })
+
+    # ── Explication automatique ──
+    explication = _generer_explication(
+        vainqueur, joueur_a, joueur_b,
+        elo_a, elo_b, elo_a_surf, elo_b_surf,
+        forme_a, forme_b, rank_a, rank_b,
+        wins_a, total_h2h, streak_a, streak_b,
+        domicile_a, domicile_b, clutch_a, clutch_b,
+        bigmatch_a, bigmatch_b, hist_t_a, hist_t_b,
+        surface, round_match, proba_v,
+        p_gen, p_clay, p_hard, p_grass, surf_key
+    )
+
+    # ── Précision du modèle surface (poids dynamique) ──
+    acc_surf_info = modeles.get('acc_surf', {})
+    acc_surface_active = acc_surf_info.get(surf_key, None)
 
     return {
         'joueur_a'       : joueur_a,
@@ -588,19 +600,22 @@ def predire_match(
         # Mode Abstention
         'abstention'     : abstention,
         'anomalies'      : anomalies,
-        # IA Suprême — détail des probas par surface (pour affichage consensus)
-        'ia_supreme_active' : ia_supreme is not None,
+        # IA Suprême
+        'ia_supreme_active' : meta_model is not None,
         'proba_gen'         : round(p_gen   * 100, 1),
         'proba_clay'        : round(p_clay  * 100, 1),
         'proba_hard'        : round(p_hard  * 100, 1),
         'proba_grass'       : round(p_grass * 100, 1),
         'consensus_score'   : round(consensus_score * 100, 1),
+        'acc_surface_active': round(acc_surface_active * 100, 1) if acc_surface_active else None,
+        # Explication automatique
+        'explication'    : explication,
         # Score de confiance
         'confiance'      : _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h2h, rank_a, rank_b),
-        # Over/Under sets 2.5 — Modèle IA
+        # Over/Under sets 2.5
         'ou_sets_proba'  : float(modele_ou_sets.predict_proba(X)[0][1]) if modele_ou_sets is not None else (1.0 if nb_sets_p > 2 else 0.0),
         'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if modele_ou_sets is not None else nb_sets_p > 2,
-        # Over/Under jeux — Modèle IA
+        # Over/Under jeux
         'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if modele_ou_jeux is not None else 0,
         'ou_jeux_predit' : round(float(modele_ou_jeux.predict(X)[0]), 1) if modele_ou_jeux is not None else None,
         'ou_jeux_std'    : modeles.get('std_globale_jeux', 3.5),
@@ -610,14 +625,9 @@ def predire_match(
 # SCORE DE CONFIANCE
 # ============================================================
 def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h2h, rank_a, rank_b):
-    """
-    Calcule un score de confiance global basé sur plusieurs facteurs.
-    Retourne un dict avec niveau, score, couleur et détails.
-    """
     score = 0
     details = []
 
-    # 1. Probabilité vainqueur (poids 40%)
     if proba_v >= 0.75:
         score += 40
         details.append(f"Probabilité très élevée ({round(proba_v*100)}%)")
@@ -630,7 +640,6 @@ def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h
     else:
         details.append(f"Match serré ({round(proba_v*100)}%)")
 
-    # 2. Différence ELO (poids 25%)
     elo_diff = abs(elo_a - elo_b)
     if elo_diff >= 200:
         score += 25
@@ -643,7 +652,6 @@ def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h
     else:
         details.append("ELO proches (match incertain)")
 
-    # 3. Forme récente (poids 20%)
     forme_diff = abs(forme_a - forme_b)
     if forme_diff >= 0.3:
         score += 20
@@ -654,7 +662,6 @@ def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h
     elif forme_diff >= 0.05:
         score += 5
 
-    # 4. H2H (poids 10%)
     if total_h2h >= 3:
         h2h_dom = max(wins_a, total_h2h - wins_a) / total_h2h
         if h2h_dom >= 0.75:
@@ -663,7 +670,6 @@ def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h
         elif h2h_dom >= 0.6:
             score += 5
 
-    # 5. Classement (poids 5%)
     try:
         rank_diff = abs(int(rank_a or 500) - int(rank_b or 500))
         if rank_diff >= 100:
@@ -672,34 +678,157 @@ def _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h
     except Exception:
         pass
 
-    # Déterminer le niveau
     if score >= 70:
-        niveau   = "HAUTE"
-        emoji    = "🟢"
-        couleur  = "success"
+        niveau, emoji, couleur = "HAUTE", "🟢", "success"
     elif score >= 45:
-        niveau   = "MOYENNE"
-        emoji    = "🟡"
-        couleur  = "warning"
+        niveau, emoji, couleur = "MOYENNE", "🟡", "warning"
     else:
-        niveau   = "FAIBLE"
-        emoji    = "🔴"
-        couleur  = "error"
+        niveau, emoji, couleur = "FAIBLE", "🔴", "error"
 
     return {
-        'niveau'  : niveau,
-        'score'   : score,
-        'emoji'   : emoji,
-        'couleur' : couleur,
-        'details' : details,
+        'niveau': niveau, 'score': score, 'emoji': emoji,
+        'couleur': couleur, 'details': details,
     }
+
+# ============================================================
+# EXPLICATION AUTOMATIQUE
+# ============================================================
+def _generer_explication(
+    vainqueur, joueur_a, joueur_b,
+    elo_a, elo_b, elo_a_surf, elo_b_surf,
+    forme_a, forme_b, rank_a, rank_b,
+    wins_a, total_h2h, streak_a, streak_b,
+    domicile_a, domicile_b, clutch_a, clutch_b,
+    bigmatch_a, bigmatch_b, hist_t_a, hist_t_b,
+    surface, round_match, proba_v,
+    p_gen, p_clay, p_hard, p_grass, surf_key
+):
+    """
+    Génère une explication textuelle de la prédiction.
+    Analyse chaque facteur et retourne une liste de raisons ordonnées par impact.
+    """
+    is_a = (vainqueur == joueur_a)
+    v = vainqueur
+    o = joueur_b if is_a else joueur_a
+
+    # Valeurs du vainqueur / de l'adversaire
+    elo_v      = elo_a if is_a else elo_b
+    elo_o      = elo_b if is_a else elo_a
+    elo_sv     = elo_a_surf if is_a else elo_b_surf
+    elo_so     = elo_b_surf if is_a else elo_a_surf
+    forme_v    = forme_a if is_a else forme_b
+    forme_o    = forme_b if is_a else forme_a
+    rank_v     = rank_a if is_a else rank_b
+    rank_o     = rank_b if is_a else rank_a
+    streak_v   = streak_a if is_a else streak_b
+    streak_o   = streak_b if is_a else streak_a
+    dom_v      = domicile_a if is_a else domicile_b
+    clutch_v   = clutch_a if is_a else clutch_b
+    bigmatch_v = bigmatch_a if is_a else bigmatch_b
+    hist_t_v   = hist_t_a if is_a else hist_t_b
+    h2h_v      = wins_a if is_a else (total_h2h - wins_a)
+    h2h_o      = (total_h2h - wins_a) if is_a else wins_a
+
+    raisons = []
+
+    # 1. ELO général
+    diff_elo = elo_v - elo_o
+    if diff_elo > 200:
+        raisons.append((30, f"⚡ ELO nettement supérieur ({round(elo_v)} vs {round(elo_o)}, +{round(diff_elo)} pts)"))
+    elif diff_elo > 100:
+        raisons.append((20, f"⚡ Avantage ELO solide ({round(elo_v)} vs {round(elo_o)})"))
+    elif diff_elo > 30:
+        raisons.append((10, f"⚡ Léger avantage ELO ({round(elo_v)} vs {round(elo_o)})"))
+    elif diff_elo < -100:
+        raisons.append((5, f"⚠️ ELO inférieur ({round(elo_v)} vs {round(elo_o)}) — d'autres facteurs compensent"))
+
+    # 2. ELO surface
+    diff_elo_s = elo_sv - elo_so
+    if diff_elo_s > 150:
+        raisons.append((25, f"🎾 Spécialiste {surface} (ELO surface {round(elo_sv)} vs {round(elo_so)})"))
+    elif diff_elo_s > 80:
+        raisons.append((15, f"🎾 Bon sur {surface} (ELO surface +{round(diff_elo_s)})"))
+
+    # 3. Forme récente
+    diff_forme = (forme_v - forme_o)
+    if diff_forme > 0.25:
+        raisons.append((22, f"📈 Forme récente excellente ({round(forme_v*100)}% vs {round(forme_o*100)}%)"))
+    elif diff_forme > 0.10:
+        raisons.append((12, f"📈 Meilleure forme récente ({round(forme_v*100)}% vs {round(forme_o*100)}%)"))
+    elif diff_forme < -0.15:
+        raisons.append((5, f"⚠️ Forme inférieure — compensée par d'autres facteurs"))
+
+    # 4. Classement
+    try:
+        rv, ro = int(rank_v), int(rank_o)
+        if rv < ro and (ro - rv) > 50:
+            raisons.append((15, f"🏅 Mieux classé (#{rv} vs #{ro})"))
+        elif rv < ro and (ro - rv) > 15:
+            raisons.append((8, f"🏅 Classement légèrement supérieur (#{rv} vs #{ro})"))
+    except:
+        pass
+
+    # 5. H2H
+    if total_h2h >= 3:
+        if h2h_v > h2h_o:
+            raisons.append((18, f"🤝 Domine les confrontations ({h2h_v}-{h2h_o})"))
+        elif h2h_o > h2h_v:
+            raisons.append((5, f"⚠️ Désavantagé au H2H ({h2h_v}-{h2h_o}) — compensé par la forme"))
+    elif total_h2h > 0:
+        raisons.append((3, f"🤝 H2H limité ({h2h_v}-{h2h_o}, {total_h2h} match(s))"))
+
+    # 6. Streak
+    if streak_v >= 7:
+        raisons.append((20, f"🔥 Série exceptionnelle de {int(streak_v)} victoires"))
+    elif streak_v >= 4:
+        raisons.append((12, f"🔥 En grande forme ({int(streak_v)} victoires d'affilée)"))
+    elif streak_v >= 2:
+        raisons.append((5, f"🔥 En bonne dynamique ({int(streak_v)} victoires)"))
+
+    # 7. Domicile
+    if dom_v == 2:
+        raisons.append((10, "🏠 Avantage du domicile (joue dans son pays)"))
+    elif dom_v == 1:
+        raisons.append((5, "🌍 Joue en pays voisin (léger avantage public)"))
+
+    # 8. Clutch / Big match (en phases finales)
+    rnd = str(round_match).upper()
+    if 'FINAL' in rnd or rnd in ['F', 'SF', 'QF']:
+        if clutch_v > 0.65:
+            raisons.append((12, f"🎯 Excellent en matchs serrés (clutch {round(clutch_v*100)}%)"))
+        if bigmatch_v > 0.65:
+            raisons.append((10, f"🏆 Performant en grands matchs ({round(bigmatch_v*100)}%)"))
+
+    # 9. Historique tournoi
+    if hist_t_v > 0.7:
+        raisons.append((8, f"📅 Très bon historique sur ce tournoi ({round(hist_t_v*100)}%)"))
+    elif hist_t_v > 0.55:
+        raisons.append((4, f"📅 Bon historique sur ce tournoi ({round(hist_t_v*100)}%)"))
+
+    # 10. Consensus IA
+    probas = [p_gen, p_clay, p_hard, p_grass]
+    ecart = max(probas) - min(probas)
+    if ecart < 0.05:
+        raisons.append((15, "✅ Les 4 IA sont unanimes (consensus fort)"))
+    elif ecart < 0.15:
+        raisons.append((8, "✅ Bon accord entre les IA"))
+    elif ecart > 0.25:
+        raisons.append((0, "⚠️ Désaccord entre les IA — prédiction moins sûre"))
+
+    # Trier par impact décroissant et ne garder que les textes
+    raisons.sort(key=lambda x: x[0], reverse=True)
+
+    # Si aucune raison forte
+    if not raisons or raisons[0][0] < 10:
+        raisons.insert(0, (0, "🔄 Combinaison de multiples facteurs légèrement favorables"))
+
+    return [texte for _, texte in raisons]
 
 
 # ============================================================
 # PAGE PRÉDICTION
 # ============================================================
 def chercher_match_aujourd_hui(nom):
-    """Cherche si le nom correspond à un match du jour via rotation API + cache."""
     from modules.api_rotation import appel_api
     from datetime import datetime
 
@@ -725,8 +854,7 @@ def chercher_match_aujourd_hui(nom):
             continue
         if any(mot in p1.lower() or mot in p2.lower() for mot in mots):
             matchs_trouves.append({
-                "joueur_a": p1,
-                "joueur_b": p2,
+                "joueur_a": p1, "joueur_b": p2,
                 "tournoi": m.get("league_name", ""),
                 "heure": m.get("event_time", ""),
             })
@@ -740,7 +868,6 @@ def page_prediction(modeles, df_base):
 
     liste_joueurs = list(modeles['elo_final'].keys())
 
-    # Init session state
     for k in ["suggestion_match", "joueur_a_auto", "joueur_b_auto", "ignorer_api"]:
         if k not in st.session_state:
             st.session_state[k] = None
@@ -749,32 +876,24 @@ def page_prediction(modeles, df_base):
     if "api_joueurs_b" not in st.session_state:
         st.session_state["api_joueurs_b"] = []
 
-    # ── Colonnes joueurs ──
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("Joueur A")
         nom_a = st.text_input(
-            "Nom du joueur A",
-            placeholder="Ex: Djokovic, Nadal...",
-            key="nom_a",
-            value=st.session_state.get("joueur_a_auto") or ""
+            "Nom du joueur A", placeholder="Ex: Djokovic, Nadal...",
+            key="nom_a", value=st.session_state.get("joueur_a_auto") or ""
         )
 
-        # Recherche match du jour via API (prioritaire)
         if nom_a and len(nom_a) >= 3 and not st.session_state.get("ignorer_api"):
             matchs_api = chercher_match_aujourd_hui(nom_a)
             if matchs_api:
                 st.markdown("---")
                 for match in matchs_api[:2]:
                     st.success(f"Match trouve aujourd'hui : {match['joueur_a']} vs {match['joueur_b']} | {match['tournoi']}")
-
                     col_ok, col_no = st.columns(2)
                     with col_ok:
-                        if st.button(
-                            f"✅ Utiliser ce match",
-                            key=f"use_match_{match['joueur_a']}_{match['joueur_b']}"
-                        ):
+                        if st.button(f"✅ Utiliser ce match", key=f"use_match_{match['joueur_a']}_{match['joueur_b']}"):
                             st.session_state["joueur_a_auto"] = match["joueur_a"]
                             st.session_state["joueur_b_auto"] = match["joueur_b"]
                             st.session_state["ignorer_api"] = True
@@ -801,84 +920,72 @@ def page_prediction(modeles, df_base):
                                 suggestions_a.append((n, 75))
                 if suggestions_a:
                     options_a = [
-                        f"{j} (similarite {s:.0f}%)"
-                        for j, s in suggestions_a
+                        f"{j} (similarite {s:.0f}%)" for j, s in suggestions_a
                     ] + ["❌ Aucun de ces joueurs — aller dans Joueurs"]
-                choix_a  = st.selectbox(
-                    "Selectionne le joueur A",
-                    options_a, key="choix_a"
-                )
-                if choix_a == "❌ Aucun de ces joueurs — aller dans Joueurs":
-                    joueur_a = None
-                    st.markdown("---")
-                    st.markdown(f"### ➕ Ajouter **{nom_a}** à la base")
-                    onglet_api_a, onglet_csv_a = st.tabs(["🌐 Via API", "📁 Via CSV"])
-                    with onglet_api_a:
-                        if st.button("🔍 Rechercher via API", key="api_a"):
-                            from modules.joueurs import ajouter_joueur_api
-                            with st.spinner("Recherche en cours..."):
-                                matchs_api = ajouter_joueur_api(nom_a)
-                            if matchs_api:
-                                nouveaux = []
-                                for m in matchs_api:
-                                    nouveaux.append({
-                                        "winner_name": m.get("event_first_player", ""),
-                                        "loser_name": m.get("event_second_player", ""),
-                                        "surface": m.get("event_ground", "Hard"),
-                                        "tourney_name": m.get("league_name", "Unknown"),
-                                        "tourney_date": m.get("event_date", "2026-01-01"),
-                                        "score": m.get("event_final_result", ""),
-                                        "round": m.get("event_round", "R32"),
-                                        "winner_rank": m.get("first_player_rank", 500),
-                                        "loser_rank": m.get("second_player_rank", 500),
-                                    })
-                                from modules.mise_a_jour import mise_a_jour_incrementale
-                                modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                                df_new = pd.DataFrame(nouveaux)
-                                if st.session_state.get("df_base") is not None:
-                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
-                                st.session_state["modeles"] = modeles
-                                st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
-                            else:
-                                st.error(f"❌ {nom_a} non trouvé via API")
-                    with onglet_csv_a:
-                        st.info("""📋 **Format CSV requis :**
+                    choix_a = st.selectbox("Selectionne le joueur A", options_a, key="choix_a")
+                    if choix_a == "❌ Aucun de ces joueurs — aller dans Joueurs":
+                        joueur_a = None
+                        st.markdown("---")
+                        st.markdown(f"### ➕ Ajouter **{nom_a}** à la base")
+                        onglet_api_a, onglet_csv_a = st.tabs(["🌐 Via API", "📁 Via CSV"])
+                        with onglet_api_a:
+                            if st.button("🔍 Rechercher via API", key="api_a"):
+                                from modules.joueurs import ajouter_joueur_api
+                                with st.spinner("Recherche en cours..."):
+                                    matchs_api = ajouter_joueur_api(nom_a)
+                                if matchs_api:
+                                    nouveaux = []
+                                    for m in matchs_api:
+                                        nouveaux.append({
+                                            "winner_name": m.get("event_first_player", ""),
+                                            "loser_name": m.get("event_second_player", ""),
+                                            "surface": m.get("event_ground", "Hard"),
+                                            "tourney_name": m.get("league_name", "Unknown"),
+                                            "tourney_date": m.get("event_date", "2026-01-01"),
+                                            "score": m.get("event_final_result", ""),
+                                            "round": m.get("event_round", "R32"),
+                                            "winner_rank": m.get("first_player_rank", 500),
+                                            "loser_rank": m.get("second_player_rank", 500),
+                                        })
+                                    from modules.mise_a_jour import mise_a_jour_incrementale
+                                    modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                    df_new = pd.DataFrame(nouveaux)
+                                    if st.session_state.get("df_base") is not None:
+                                        st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                    st.session_state["modeles"] = modeles
+                                    st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                                else:
+                                    st.error(f"❌ {nom_a} non trouvé via API")
+                        with onglet_csv_a:
+                            st.info("""📋 **Format CSV requis :**
 Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
 Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R32, 450, 1
 Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
-                        fichier_a = st.file_uploader("📁 Upload CSV joueur A", type=["csv"], key="csv_a")
-                        if fichier_a:
-                            df_up = pd.read_csv(fichier_a)
-                            nouveaux = df_up.to_dict("records")
-                            from modules.mise_a_jour import mise_a_jour_incrementale
-                            modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                            if st.session_state.get("df_base") is not None:
-                                st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
-                            st.session_state["modeles"] = modeles
-                            st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
-                    st.markdown("---")
-                else:
-                    joueur_a = suggestions_a[
-                        options_a.index(choix_a)
-                    ][0]
-                    elo_a = modeles['elo_final'].get(joueur_a, 1500)
-                    st.info(f"ELO : **{round(elo_a)}**")
+                            fichier_a = st.file_uploader("📁 Upload CSV joueur A", type=["csv"], key="csv_a")
+                            if fichier_a:
+                                df_up = pd.read_csv(fichier_a)
+                                nouveaux = df_up.to_dict("records")
+                                from modules.mise_a_jour import mise_a_jour_incrementale
+                                modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                if st.session_state.get("df_base") is not None:
+                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
+                                st.session_state["modeles"] = modeles
+                                st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                        st.markdown("---")
+                    else:
+                        joueur_a = suggestions_a[options_a.index(choix_a)][0]
+                        elo_a = modeles['elo_final'].get(joueur_a, 1500)
+                        st.info(f"ELO : **{round(elo_a)}**")
             else:
-                st.warning(
-                    f"⚠️ '{nom_a}' introuvable — "
-                    "va dans l'onglet 👤 Joueurs pour l'ajouter"
-                )
+                st.warning(f"⚠️ '{nom_a}' introuvable — va dans l'onglet 👤 Joueurs pour l'ajouter")
 
     with col2:
         st.subheader("Joueur B")
         nom_b = st.text_input(
-            "Nom du joueur B",
-            placeholder="Ex: Alcaraz, Sinner...",
-            key="nom_b",
-            value=st.session_state.get("joueur_b_auto") or ""
+            "Nom du joueur B", placeholder="Ex: Alcaraz, Sinner...",
+            key="nom_b", value=st.session_state.get("joueur_b_auto") or ""
         )
 
-        # Recherche match du jour via API (prioritaire)
         if nom_b and len(nom_b) >= 3 and not st.session_state.get("ignorer_api"):
             matchs_api_b = chercher_match_aujourd_hui(nom_b)
             if matchs_api_b:
@@ -914,13 +1021,9 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                             suggestions_b.append((n, 75))
                 if suggestions_b:
                     options_b = [
-                        f"{j} (similarite {s:.0f}%)"
-                        for j, s in suggestions_b
+                        f"{j} (similarite {s:.0f}%)" for j, s in suggestions_b
                     ] + ['❌ Aucun de ces joueurs — aller dans Joueurs']
-                    choix_b = st.selectbox(
-                        'Selectionne le joueur B',
-                        options_b, key='choix_b'
-                    )
+                    choix_b = st.selectbox('Selectionne le joueur B', options_b, key='choix_b')
                     if choix_b == '❌ Aucun de ces joueurs — aller dans Joueurs':
                         joueur_b = None
                         st.markdown('---')
@@ -971,92 +1074,49 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                                 st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
                         st.markdown("---")
                     else:
-                        joueur_b = suggestions_b[
-                            options_b.index(choix_b)
-                        ][0]
+                        joueur_b = suggestions_b[options_b.index(choix_b)][0]
                         elo_b = modeles['elo_final'].get(joueur_b, 1500)
                         st.info(f"ELO : **{round(elo_b)}**")
             else:
-                st.warning(
-                    f"⚠️ '{nom_b}' introuvable — "
-                    "va dans l'onglet 👤 Joueurs pour l'ajouter"
-                )
+                st.warning(f"⚠️ '{nom_b}' introuvable — va dans l'onglet 👤 Joueurs pour l'ajouter")
 
     st.markdown("---")
 
-    # ── Paramètres match ──
     col3, col4, col5, col6 = st.columns(4)
-
     with col3:
-        surface = st.selectbox(
-            "🎾 Surface",
-            ["Hard", "Clay", "Grass", "Carpet", "Hard (Indoor)"],
-            help="Hard=Dur · Clay=Terre battue · Grass=Gazon"
-        )
+        surface = st.selectbox("🎾 Surface", ["Hard", "Clay", "Grass", "Carpet", "Hard (Indoor)"],
+                               help="Hard=Dur · Clay=Terre battue · Grass=Gazon")
     with col4:
-        tournoi = st.selectbox(
-            "🏆 Circuit",
-            ["ATP", "WTA", "Challenger", "ITF", "Futures"],
-            help="Sélectionne le circuit du tournoi"
-        )
+        tournoi = st.selectbox("🏆 Circuit", ["ATP", "WTA", "Challenger", "ITF", "Futures"],
+                               help="Sélectionne le circuit du tournoi")
     with col5:
-        round_match = st.selectbox(
-            "🔢 Tour",
-            ["R128", "R64", "R32", "R16", "QF", "SF", "F"],
-            help="R32=3ème tour · QF=Quart · SF=Demi · F=Finale"
-        )
+        round_match = st.selectbox("🔢 Tour", ["R128", "R64", "R32", "R16", "QF", "SF", "F"],
+                                   help="R32=3ème tour · QF=Quart · SF=Demi · F=Finale")
     with col6:
-        best_of = st.selectbox(
-            "📋 Format",
-            [3, 5],
-            format_func=lambda x:
-                f"Best of {x} "
-                f"({'GC/Davis' if x==5 else 'Standard'})",
-            help="Best of 3 = max 3 sets · Best of 5 = max 5 sets (Grands Chelems)"
-        )
+        best_of = st.selectbox("📋 Format", [3, 5],
+                               format_func=lambda x: f"Best of {x} ({'GC/Davis' if x==5 else 'Standard'})",
+                               help="Best of 3 = max 3 sets · Best of 5 = max 5 sets (Grands Chelems)")
 
     st.markdown("---")
 
-    # ── Cotes bookmakers ──
     st.subheader("💰 Cotes bookmakers (optionnel)")
-    st.caption(
-        "Entre les cotes de ton bookmaker pour détecter "
-        "les value bets"
-    )
+    st.caption("Entre les cotes de ton bookmaker pour détecter les value bets")
     col7, col8, col9 = st.columns([2, 2, 1])
-
     with col7:
-        cote_a = st.number_input(
-            f"Cote {joueur_a if joueur_a else 'Joueur A'}",
-            min_value=1.01, max_value=50.0,
-            value=2.00, step=0.05, key="cote_a"
-        )
+        cote_a = st.number_input(f"Cote {joueur_a if joueur_a else 'Joueur A'}",
+                                 min_value=1.01, max_value=50.0, value=2.00, step=0.05, key="cote_a")
     with col8:
-        cote_b = st.number_input(
-            f"Cote {joueur_b if joueur_b else 'Joueur B'}",
-            min_value=1.01, max_value=50.0,
-            value=2.00, step=0.05, key="cote_b"
-        )
+        cote_b = st.number_input(f"Cote {joueur_b if joueur_b else 'Joueur B'}",
+                                 min_value=1.01, max_value=50.0, value=2.00, step=0.05, key="cote_b")
     with col9:
         st.markdown("<br>", unsafe_allow_html=True)
-        utiliser_cotes = st.checkbox(
-            "Activer", value=False,
-            help="Coche pour utiliser les cotes"
-        )
+        utiliser_cotes = st.checkbox("Activer", value=False, help="Coche pour utiliser les cotes")
 
     st.markdown("---")
 
-    # ── Bouton prédiction ──
-    if st.button(
-        "🔮 Lancer la prédiction",
-        type="primary"
-    ):
+    if st.button("🔮 Lancer la prédiction", type="primary"):
         if not joueur_a or not joueur_b:
-            st.error(
-                "❌ Sélectionne les deux joueurs ! "
-                "Si un joueur est introuvable, "
-                "va dans l'onglet 👤 Joueurs pour l'ajouter."
-            )
+            st.error("❌ Sélectionne les deux joueurs ! Si un joueur est introuvable, va dans l'onglet 👤 Joueurs pour l'ajouter.")
         elif joueur_a == joueur_b:
             st.error("❌ Les deux joueurs doivent être différents !")
         else:
@@ -1067,23 +1127,29 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 st.stop()
             with st.spinner("⏳ Calcul en cours..."):
                 res = predire_match(
-                    joueur_a, joueur_b,
-                    modeles, df_base,
-                    surface     = surface,
-                    tournoi     = tournoi,
-                    round_match = round_match,
-                    best_of     = best_of,
-                    cote_a = cote_a if utiliser_cotes else None,
-                    cote_b = cote_b if utiliser_cotes else None,
+                    joueur_a, joueur_b, modeles, df_base,
+                    surface=surface, tournoi=tournoi,
+                    round_match=round_match, best_of=best_of,
+                    cote_a=cote_a if utiliser_cotes else None,
+                    cote_b=cote_b if utiliser_cotes else None,
                 )
 
             incrementer_compteur_predictions()
             st.success("✅ Prédiction calculée !")
 
-            # ── Score de confiance ──
+            # ── Badge modèle utilisé ──
             modele_info = res.get('modele_utilise', 'Général')
-            if 'Spécialisé' in modele_info:
+            if 'Suprême' in modele_info:
+                st.success(f"👑 Modèle **{modele_info}** utilisé pour cette prédiction")
+                acc_s = res.get('acc_surface_active')
+                if acc_s:
+                    st.caption(f"📊 Précision historique IA sur cette surface : **{acc_s}%**")
+            elif 'Spécialisé' in modele_info:
                 st.info(f"🎯 Modèle **{modele_info}** utilisé pour cette prédiction")
+            else:
+                st.info(f"🌍 Modèle **{modele_info}** utilisé pour cette prédiction")
+
+            # ── Score de confiance ──
             conf = res.get('confiance', {})
             if conf:
                 niveau  = conf.get('niveau', '')
@@ -1103,6 +1169,15 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     with st.expander("📋 Détails du score de confiance"):
                         for d in details:
                             st.markdown(f"• {d}")
+
+            # ── Explication automatique ──
+            explication = res.get('explication', [])
+            if explication:
+                with st.expander("🧠 Pourquoi cette prédiction ?", expanded=True):
+                    st.markdown(f"**L'IA prédit la victoire de {res['vainqueur']} ({res['proba_v']}%) pour les raisons suivantes :**")
+                    st.markdown("")
+                    for exp in explication:
+                        st.markdown(f"  {exp}")
 
             # ── Zone Copier + WhatsApp ──
             conf_emoji  = res.get('confiance', {}).get('emoji', '')
@@ -1162,22 +1237,17 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            st.markdown("---")
-
-            # ── Mode Abstention ────────────────────────────────
+            # ── Mode Abstention ──
             if res.get('anomalies'):
                 if res.get('abstention'):
-                    # Abstention forte — 2+ anomalies
                     st.error(
                         "⛔ **L'IA Suprême déconseille ce match**\n\n"
                         "La prédiction est affichée ci-dessous mais la fiabilité est très réduite. "
                         "Évitez de miser sur ce match."
                     )
                 else:
-                    # Avertissement simple — 1 anomalie
                     st.warning("⚠️ **Prédiction à interpréter avec prudence**")
 
-                # Détail des anomalies dans un expander
                 with st.expander("🔍 Voir les raisons", expanded=res.get('abstention', False)):
                     for msg in res['anomalies']:
                         st.markdown(f"- {msg}")
@@ -1185,23 +1255,13 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             # ── Résultats ──
             col_v1, col_v2, col_v3, col_v4 = st.columns(4)
             with col_v1:
-                st.metric(
-                    "🏆 Vainqueur prédit",
-                    res['vainqueur'],
-                    f"{res['proba_v']}%"
-                )
+                st.metric("🏆 Vainqueur prédit", res['vainqueur'], f"{res['proba_v']}%")
             with col_v2:
                 st.metric("🎯 Score exact", res['score_exact'])
             with col_v3:
-                st.metric(
-                    "🔢 Nombre de sets",
-                    f"{res['nb_sets']} sets"
-                )
+                st.metric("🔢 Nombre de sets", f"{res['nb_sets']} sets")
             with col_v4:
-                st.metric(
-                    "⚖️ Handicap",
-                    f"{res['handicap']} set(s)"
-                )
+                st.metric("⚖️ Handicap", f"{res['handicap']} set(s)")
 
             st.markdown("---")
 
@@ -1209,17 +1269,11 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             if res.get('ia_supreme_active'):
                 cons = res.get('consensus_score', 0)
                 if cons < 10:
-                    cons_emoji  = "🟢"
-                    cons_label  = "CONSENSUS FORT — Prédiction très fiable"
-                    cons_color  = "success"
+                    cons_emoji, cons_label, cons_color = "🟢", "CONSENSUS FORT — Prédiction très fiable", "success"
                 elif cons < 25:
-                    cons_emoji  = "🟡"
-                    cons_label  = "CONSENSUS MOYEN — Prédiction fiable"
-                    cons_color  = "warning"
+                    cons_emoji, cons_label, cons_color = "🟡", "CONSENSUS MOYEN — Prédiction fiable", "warning"
                 else:
-                    cons_emoji  = "🔴"
-                    cons_label  = "DÉSACCORD — Match imprévisible"
-                    cons_color  = "error"
+                    cons_emoji, cons_label, cons_color = "🔴", "DÉSACCORD — Match imprévisible", "error"
 
                 with st.expander(f"{cons_emoji} IA Suprême · {cons_label}", expanded=True):
                     c1, c2, c3, c4 = st.columns(4)
@@ -1238,44 +1292,23 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 st.markdown("**📊 Statistiques comparées**")
                 stats_df = pd.DataFrame({
                     'Statistique' : [
-                        'ELO général',
-                        f'ELO {surface}',
-                        'Forme récente',
-                        'H2H',
-                        'Classement',
-                        'Hot streak',
-                        'Comeback',
-                        'Clutch',
-                        'Big match',
-                        'Dominance',
-                        'Historique tournoi',
-                        'Domicile',
+                        'ELO général', f'ELO {surface}', 'Forme récente', 'H2H',
+                        'Classement', 'Hot streak', 'Comeback', 'Clutch',
+                        'Big match', 'Dominance', 'Historique tournoi', 'Domicile',
                     ],
                     joueur_a : [
-                        res['elo_a'],
-                        res['elo_a_surf'],
-                        f"{res['forme_a']}%",
-                        res['h2h_a'],
-                        f"#{res['rank_a']}",
-                        f"{res.get('streak_a', 0)} victoires",
-                        f"{res.get('comeback_a', 30)}%",
-                        f"{res.get('clutch_a', 50)}%",
-                        f"{res.get('bigmatch_a', 50)}%",
-                        f"{res.get('dominance_a', 0)}%",
+                        res['elo_a'], res['elo_a_surf'], f"{res['forme_a']}%", res['h2h_a'],
+                        f"#{res['rank_a']}", f"{res.get('streak_a', 0)} victoires",
+                        f"{res.get('comeback_a', 30)}%", f"{res.get('clutch_a', 50)}%",
+                        f"{res.get('bigmatch_a', 50)}%", f"{res.get('dominance_a', 0)}%",
                         f"{res.get('hist_tournoi_a', 50)}%",
                         '🏠 Domicile' if res.get('domicile_a') == 2 else ('🌍 Voisin' if res.get('domicile_a') == 1 else '✈️ Extérieur'),
                     ],
                     joueur_b : [
-                        res['elo_b'],
-                        res['elo_b_surf'],
-                        f"{res['forme_b']}%",
-                        res['h2h_b'],
-                        f"#{res['rank_b']}",
-                        f"{res.get('streak_b', 0)} victoires",
-                        f"{res.get('comeback_b', 30)}%",
-                        f"{res.get('clutch_b', 50)}%",
-                        f"{res.get('bigmatch_b', 50)}%",
-                        f"{res.get('dominance_b', 0)}%",
+                        res['elo_b'], res['elo_b_surf'], f"{res['forme_b']}%", res['h2h_b'],
+                        f"#{res['rank_b']}", f"{res.get('streak_b', 0)} victoires",
+                        f"{res.get('comeback_b', 30)}%", f"{res.get('clutch_b', 50)}%",
+                        f"{res.get('bigmatch_b', 50)}%", f"{res.get('dominance_b', 0)}%",
                         f"{res.get('hist_tournoi_b', 50)}%",
                         '🏠 Domicile' if res.get('domicile_b') == 2 else ('🌍 Voisin' if res.get('domicile_b') == 1 else '✈️ Extérieur'),
                     ]
@@ -1292,12 +1325,9 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     textposition='auto',
                 ))
                 fig.update_layout(
-                    yaxis_title="Probabilité (%)",
-                    yaxis_range=[0, 100],
-                    height=300,
-                    margin=dict(t=20),
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
+                    yaxis_title="Probabilité (%)", yaxis_range=[0, 100],
+                    height=300, margin=dict(t=20),
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='white'),
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -1306,39 +1336,22 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             # ── Over/Under ──
             st.markdown("**📈 Over / Under — Total Jeux**")
-
-            # Calcul probabilités Over/Under
             ou_jeux = res.get('ou_jeux_predit')
             ou_std  = res.get('ou_jeux_std', 3.5)
 
             if ou_jeux is not None:
                 from scipy import stats as _stats
-
                 SEUILS = [18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 32.5]
-
-                # Trouver le seuil le plus proche du total prédit
                 seuil_proche = min(SEUILS, key=lambda s: abs(s - ou_jeux))
-
-                # Tableau des probabilités
                 import pandas as _pd2
                 rows_ou = []
                 for seuil in SEUILS:
-                    # Probabilité OVER = P(X > seuil) avec distribution normale
                     prob_over  = round(float(1 - _stats.norm.cdf(seuil, loc=ou_jeux, scale=ou_std)) * 100, 1)
                     prob_under = round(100 - prob_over, 1)
                     marker = " ✅" if seuil == seuil_proche else ""
-                    rows_ou.append({
-                        "Seuil"        : f"{seuil}{marker}",
-                        "UNDER"        : f"{prob_under}%",
-                        "OVER"         : f"{prob_over}%",
-                    })
-
+                    rows_ou.append({"Seuil": f"{seuil}{marker}", "UNDER": f"{prob_under}%", "OVER": f"{prob_over}%"})
                 st.caption(f"Total jeux prédit par l'IA : **{ou_jeux} jeux**")
-                st.dataframe(
-                    _pd2.DataFrame(rows_ou),
-                    hide_index=True,
-                    use_container_width=True
-                )
+                st.dataframe(_pd2.DataFrame(rows_ou), hide_index=True, use_container_width=True)
                 st.caption("✅ = seuil le plus proche du total prédit · Basé sur distribution statistique autour de la prédiction IA")
             else:
                 st.info("Modèle Over/Under disponible après réentraînement (`python entrainement_hebdo.py`)")
@@ -1347,14 +1360,11 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             if utiliser_cotes and cote_a and cote_b and cote_a > 1 and cote_b > 1:
                 st.markdown("---")
                 st.markdown("**📊 Prédiction IA vs Bookmaker**")
-
-                # Calcul probas bookmaker normalisees
                 raw_a = 1 / cote_a
                 raw_b = 1 / cote_b
                 total_raw = raw_a + raw_b
                 prob_bk_a = round(raw_a / total_raw * 100, 1)
                 prob_bk_b = round(raw_b / total_raw * 100, 1)
-
                 col_ia, col_bk = st.columns(2)
                 with col_ia:
                     st.markdown("**🤖 IA**")
@@ -1365,7 +1375,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     st.metric(joueur_a, f"{prob_bk_a}%", f"cote {cote_a}")
                     st.metric(joueur_b, f"{prob_bk_b}%", f"cote {cote_b}")
 
-            # Value bet
             if res['value_bet_info']:
                 st.markdown("---")
                 for info in res['value_bet_info']:
@@ -1384,19 +1393,14 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             elif utiliser_cotes:
                 st.info("❌ Pas de value bet detecte — les cotes sont bien calibrees par rapport a la prediction IA.")
 
-            # Sauvegarde
             sauvegarder_prediction(res)
-            st.caption(
-                f"✅ Prédiction sauvegardée — {res['date']}"
-            )
+            st.caption(f"✅ Prédiction sauvegardée — {res['date']}")
 
 # ============================================================
 # SAUVEGARDE HISTORIQUE
 # ============================================================
 def sauvegarder_prediction(res):
-    fichier = os.path.join(
-        os.path.dirname(__file__), '..', 'data', 'historique.json'
-    )
+    fichier = os.path.join(os.path.dirname(__file__), '..', 'data', 'historique.json')
     historique = []
     if os.path.exists(fichier):
         try:
@@ -1405,7 +1409,6 @@ def sauvegarder_prediction(res):
         except:
             historique = []
 
-    # Conversion pour JSON
     res_json = {}
     for k, v in res.items():
         try:
