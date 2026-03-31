@@ -1126,13 +1126,18 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 st.error(f"🔒 {message}")
                 st.stop()
             with st.spinner("⏳ Calcul en cours..."):
-                res = predire_match(
-                    joueur_a, joueur_b, modeles, df_base,
-                    surface=surface, tournoi=tournoi,
-                    round_match=round_match, best_of=best_of,
-                    cote_a=cote_a if utiliser_cotes else None,
-                    cote_b=cote_b if utiliser_cotes else None,
-                )
+                try:
+                    res = predire_match(
+                        joueur_a, joueur_b, modeles, df_base,
+                        surface=surface, tournoi=tournoi,
+                        round_match=round_match, best_of=best_of,
+                        cote_a=cote_a if utiliser_cotes else None,
+                        cote_b=cote_b if utiliser_cotes else None,
+                    )
+                except Exception as e:
+                    st.error(f"❌ ERREUR DÉTECTÉE : {type(e).__name__}: {e}")
+                    st.exception(e)
+                    st.stop()
 
             incrementer_compteur_predictions()
             st.success("✅ Prédiction calculée !")
