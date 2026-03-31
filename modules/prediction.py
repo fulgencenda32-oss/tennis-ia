@@ -485,7 +485,7 @@ def predire_match(
             f"— résultat imprévisible, mise réduite conseillée"
         )
 
-    if df_base is not None:
+    if df_base is not None and 'surface' in df_base.columns:
         surf_clean = surface.split()[0]
         matchs_surf_a = len(df_base[
             ((df_base['winner_name'] == joueur_a) | (df_base['loser_name'] == joueur_a)) &
