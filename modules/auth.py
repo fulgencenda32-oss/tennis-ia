@@ -207,14 +207,19 @@ def creer_profil_utilisateur(uid, email, nom="Utilisateur"):
         return None
 
 def charger_profil_utilisateur(uid, email):
-    """Charge le profil depuis Firestore, le crée si absent."""
+    """Charge le profil depuis Firestore, le crée si absent. Cache en session pour éviter 429."""
+    cache_key = f"profil_cache_{uid}"
+    if st.session_state.get(cache_key):
+        return st.session_state[cache_key]
     try:
         db = get_db()
         doc = db.collection("users").document(uid).get()
         if doc.exists:
-            return doc.to_dict()
+            profil = doc.to_dict()
         else:
-            return creer_profil_utilisateur(uid, email)
+            profil = creer_profil_utilisateur(uid, email)
+        st.session_state[cache_key] = profil
+        return profil
     except Exception as e:
         # Mode hors-ligne : profil minimal local
         return {
