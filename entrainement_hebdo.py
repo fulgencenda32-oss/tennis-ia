@@ -576,6 +576,25 @@ modele_handi.fit(X_tr_h, y_tr_h, verbose=False)
 acc_handi = accuracy_score(y_te_h+1, modele_handi.predict(X_te_h)+1)
 print(f"   ✅ Précision : {acc_handi*100:.1f}%")
 
+# Modèle Over/Under Jeux
+print("\n🤖 Entraînement Modèle 4 — Total Jeux...")
+df_j = df_clean[df_clean['total_jeux'].notna()].copy()
+df_j = df_j[(df_j['total_jeux'] > 10) & (df_j['total_jeux'] < 80)]
+df_j['cote_diff'] = 0.0; df_j['cote_proba_A'] = 0.5; df_j['cote_proba_B'] = 0.5
+for col in ['streak_diff','comeback_diff','clutch_diff','bigmatch_diff',
+            'dominance_diff','revanche_diff','hist_tournoi_diff']:
+    if col not in df_j.columns: df_j[col] = 0.0
+X_j = df_j[FEATURES].fillna(0).astype('float32')
+y_j = df_j['total_jeux'].astype(float)
+std_globale_jeux = float(y_j.std())
+X_tr_j, X_te_j, y_tr_j, y_te_j = train_test_split(X_j, y_j, test_size=0.2, random_state=42)
+from xgboost import XGBRegressor
+modele_jeux = XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.05,
+                            subsample=0.8, random_state=42, n_jobs=-1)
+modele_jeux.fit(X_tr_j, y_tr_j, verbose=False)
+mae_jeux = float(abs(y_te_j.values - modele_jeux.predict(X_te_j)).mean())
+print(f"   ✅ MAE : {mae_jeux:.1f} jeux (écart-type dataset : {std_globale_jeux:.1f})")
+
 # ============================================================
 # ÉTAPE 6B — IA SPÉCIALISÉES PAR SURFACE (Clay, Hard, Grass)
 # ============================================================
@@ -717,6 +736,8 @@ modeles_complets = {
     'acc_handi'        : acc_handi,
     'mode_entrainement': sample_weights_info,
     'date_entrainement': datetime.now().strftime('%Y-%m-%d %H:%M'),
+    'modele_jeux'      : modele_jeux,
+    'std_globale_jeux' : std_globale_jeux,
 }
 
 with open(FICHIER_MODELE, 'wb') as f:
