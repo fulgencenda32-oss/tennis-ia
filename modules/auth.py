@@ -35,7 +35,7 @@ MODE_PAYANT = True
 LIMITE_PREDICTIONS_GRATUITES = 2  # par jour
 
 # Firebase Web API Key (à mettre dans .env)
-FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "")
+FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "") or "AIzaSyA0rB2KDA4hyiEFoPTctapHDCDV98iOGW4"
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "tennis-ia")
 
 # ─────────────────────────────────────────────
