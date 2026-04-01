@@ -13,10 +13,77 @@ FICHIER_HISTORIQUE = os.path.join(
 )
 
 # ============================================================
+# 🔧 CACHE GLOBAL POUR ÉVITER ERREUR 429
+# ============================================================
+_FIREBASE_DB_CACHE = None
+_FIREBASE_LAST_ERROR = None
+_FIREBASE_ERROR_TIME = 0
+
+def get_firebase_db_safe():
+    """
+    Connexion Firebase SÉCURISÉE avec cache et gestion erreur 429.
+    Ne retente pas pendant 5 minutes après une erreur.
+    """
+    global _FIREBASE_DB_CACHE, _FIREBASE_LAST_ERROR, _FIREBASE_ERROR_TIME
+    import time
+    
+    # Si erreur récente (moins de 5 min), ne pas retenter
+    if _FIREBASE_LAST_ERROR and (time.time() - _FIREBASE_ERROR_TIME) < 300:
+        return None
+    
+    # Si déjà connecté, retourner le cache
+    if _FIREBASE_DB_CACHE is not None:
+        return _FIREBASE_DB_CACHE
+    
+    import threading
+    result = [None]
+    error = [None]
+
+    def _connecter():
+        try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore
+
+            if not firebase_admin._apps:
+                chemin_cle = os.path.join(
+                    os.path.dirname(__file__), '..', 'data', 'firebase_key.json'
+                )
+                if os.path.exists(chemin_cle):
+                    cred = credentials.Certificate(chemin_cle)
+                    firebase_admin.initialize_app(cred)
+                elif os.getenv('FIREBASE_KEY'):
+                    cle_json = json.loads(os.getenv('FIREBASE_KEY'))
+                    cred = credentials.Certificate(cle_json)
+                    firebase_admin.initialize_app(cred)
+                else:
+                    return
+
+            result[0] = firestore.client()
+        except Exception as e:
+            error[0] = str(e)
+            result[0] = None
+
+    t = threading.Thread(target=_connecter, daemon=True)
+    t.start()
+    t.join(timeout=5)
+    
+    if error[0] and ("429" in error[0] or "quota" in error[0].lower()):
+        _FIREBASE_LAST_ERROR = error[0]
+        _FIREBASE_ERROR_TIME = time.time()
+        return None
+    
+    _FIREBASE_DB_CACHE = result[0]
+    return result[0]
+
+
+# ============================================================
 # VERIFICATION RESULTATS REELS VIA API
 # ============================================================
 def verifier_resultats_via_api(historique):
-    from modules.api_rotation import appel_api
+    try:
+        from modules.api_rotation import appel_api
+    except Exception:
+        return 0, historique
 
     trouves = 0
     a_verifier = [
@@ -37,10 +104,13 @@ def verifier_resultats_via_api(historique):
         if not joueur_a or not joueur_b or not date:
             continue
 
-        resultat = appel_api(
-            {"met": "Fixtures", "from": date, "to": date},
-            utiliser_cache=True
-        )
+        try:
+            resultat = appel_api(
+                {"met": "Fixtures", "from": date, "to": date},
+                utiliser_cache=True
+            )
+        except Exception:
+            continue
 
         if resultat["source"] == "erreur" or not resultat.get("data"):
             continue
@@ -82,50 +152,18 @@ def verifier_resultats_via_api(historique):
     barre.empty()
     return trouves, historique
 
-# ============================================================
-# CONNEXION FIREBASE
-# ============================================================
-def get_firebase_db():
-    import threading
-
-    result = [None]
-
-    def _connecter():
-        try:
-            import firebase_admin
-            from firebase_admin import credentials, firestore
-
-            if not firebase_admin._apps:
-                chemin_cle = os.path.join(
-                    os.path.dirname(__file__), '..', 'data', 'firebase_key.json'
-                )
-                if os.path.exists(chemin_cle):
-                    cred = credentials.Certificate(chemin_cle)
-                    firebase_admin.initialize_app(cred)
-                elif os.getenv('FIREBASE_KEY'):
-                    cle_json = json.loads(os.getenv('FIREBASE_KEY'))
-                    cred = credentials.Certificate(cle_json)
-                    firebase_admin.initialize_app(cred)
-                else:
-                    return
-
-            result[0] = firestore.client()
-        except Exception:
-            result[0] = None
-
-    t = threading.Thread(target=_connecter, daemon=True)
-    t.start()
-    t.join(timeout=5)
-    return result[0]
 
 # ============================================================
-# CHARGEMENT HISTORIQUE
+# CHARGEMENT HISTORIQUE — SÉCURISÉ
 # ============================================================
 def charger_historique(user_id=None, inclure_supprimes=False):
+    """Charge l'historique avec protection contre erreur 429."""
     historique_firebase = []
     historique_local    = []
 
-    db = get_firebase_db()
+    # 🔧 Utiliser la fonction sécurisée
+    db = get_firebase_db_safe()
+    
     if db:
         try:
             import concurrent.futures
@@ -141,9 +179,16 @@ def charger_historique(user_id=None, inclure_supprimes=False):
                     historique_firebase = future.result(timeout=8)
                 except concurrent.futures.TimeoutError:
                     historique_firebase = []
-        except Exception:
+                except Exception as e:
+                    if "429" in str(e) or "quota" in str(e).lower():
+                        st.warning("⚠️ Quota Firebase dépassé — utilisation du cache local")
+                    historique_firebase = []
+        except Exception as e:
+            if "429" in str(e) or "quota" in str(e).lower():
+                st.warning("⚠️ Quota Firebase dépassé — utilisation du cache local")
             historique_firebase = []
 
+    # Toujours charger le local comme backup
     if os.path.exists(FICHIER_HISTORIQUE):
         try:
             with open(FICHIER_HISTORIQUE, 'r', encoding='utf-8') as f:
@@ -151,16 +196,12 @@ def charger_historique(user_id=None, inclure_supprimes=False):
         except:
             historique_local = []
 
+    # Fusion
     if historique_firebase:
         dates_firebase = {h.get('date') for h in historique_firebase}
         for h in historique_local:
             if h.get('date') not in dates_firebase:
                 historique_firebase.append(h)
-                try:
-                    if db:
-                        db.collection('predictions').add(h)
-                except:
-                    pass
         historique = sorted(
             historique_firebase,
             key=lambda x: x.get('date', ''),
@@ -168,12 +209,6 @@ def charger_historique(user_id=None, inclure_supprimes=False):
         )
     elif historique_local:
         historique = historique_local
-        if db:
-            try:
-                for h in historique_local:
-                    db.collection('predictions').add(h)
-            except:
-                pass
     else:
         historique = []
 
@@ -185,10 +220,12 @@ def charger_historique(user_id=None, inclure_supprimes=False):
 
     return historique
 
+
 # ============================================================
-# SAUVEGARDE PREDICTION
+# SAUVEGARDE PREDICTION — SÉCURISÉE
 # ============================================================
 def sauvegarder_prediction(prediction):
+    """Sauvegarde une prédiction avec protection erreur 429."""
     import numpy as np
 
     if 'user_id' not in prediction:
@@ -212,13 +249,19 @@ def sauvegarder_prediction(prediction):
         except:
             prediction_clean[k] = str(v)
 
-    db = get_firebase_db()
+    # 🔧 Firebase avec protection
+    db = get_firebase_db_safe()
+    firebase_ok = False
     if db:
         try:
             db.collection('predictions').add(prediction_clean)
-        except:
-            pass
+            firebase_ok = True
+        except Exception as e:
+            if "429" in str(e) or "quota" in str(e).lower():
+                pass  # Silencieux, on sauvegarde en local
+            firebase_ok = False
 
+    # Toujours sauvegarder en local
     historique = []
     if os.path.exists(FICHIER_HISTORIQUE):
         try:
@@ -227,14 +270,24 @@ def sauvegarder_prediction(prediction):
         except:
             historique = []
     historique.append(prediction_clean)
-    with open(FICHIER_HISTORIQUE, 'w', encoding='utf-8') as f:
-        json.dump(historique, f, ensure_ascii=False, indent=2)
+    try:
+        with open(FICHIER_HISTORIQUE, 'w', encoding='utf-8') as f:
+            json.dump(historique, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+    
+    return firebase_ok
+
 
 def sauvegarder_historique(historique):
-    with open(FICHIER_HISTORIQUE, 'w', encoding='utf-8') as f:
-        json.dump(historique, f, ensure_ascii=False, indent=2)
+    """Sauvegarde l'historique complet."""
+    try:
+        with open(FICHIER_HISTORIQUE, 'w', encoding='utf-8') as f:
+            json.dump(historique, f, ensure_ascii=False, indent=2)
+    except:
+        pass
 
-    db = get_firebase_db()
+    db = get_firebase_db_safe()
     if db:
         try:
             for h in historique:
@@ -259,6 +312,7 @@ def sauvegarder_historique(historique):
         except:
             pass
 
+
 # ============================================================
 # PAGE HISTORIQUE
 # ============================================================
@@ -266,19 +320,22 @@ def page_historique():
     st.title("📚 Historique des prédictions")
     st.markdown("---")
 
-    db = get_firebase_db()
+    db = get_firebase_db_safe()
     if db:
         st.success("🔥 Connecté à Firebase — historique sauvegardé en ligne")
     else:
-        st.warning("💾 Mode local — Firebase non connecté")
+        st.warning("💾 Mode local — Firebase non connecté ou quota dépassé")
 
     user = st.session_state.get("user", {})
     user_id = user.get('uid', '')
-    user_email = user.get('email', 'Utilisateur')
 
-    from modules.auth import is_admin, is_premium
-    est_admin = is_admin()
-    est_premium = is_premium()
+    try:
+        from modules.auth import is_admin, is_premium
+        est_admin = is_admin()
+        est_premium = is_premium()
+    except:
+        est_admin = False
+        est_premium = False
 
     if est_admin:
         historique_complet = charger_historique(inclure_supprimes=True)
@@ -289,73 +346,41 @@ def page_historique():
         if voir_supprimes:
             historique = historique_complet
     else:
-        historique_toutes = charger_historique(user_id=user_id, inclure_supprimes=False)
-        date_limite = datetime.now() - timedelta(days=30)
-
-        if est_premium:
-            historique = historique_toutes
-            st.caption(f"⭐ Compte Premium — {user_email} — Historique complet")
-        else:
-            historique = []
-            masquees = 0
-            for h in historique_toutes:
-                try:
-                    date_pred = datetime.strptime(str(h.get('date', ''))[:10], '%Y-%m-%d')
-                    if date_pred >= date_limite:
-                        historique.append(h)
-                    else:
-                        masquees += 1
-                except:
-                    historique.append(h)
-
-            st.caption(f"📌 Tes prédictions — {user_email} — 30 derniers jours")
-
-            if masquees > 0:
-                st.warning(
-                    f"🔒 **{masquees} prédiction(s) masquée(s)** — "
-                    f"Passe en Premium pour voir tout ton historique !"
-                )
+        historique = charger_historique(user_id=user_id, inclure_supprimes=False)
 
     if not historique:
-        st.info("📝 Aucune prédiction enregistrée.\n\nFais ta première prédiction dans l'onglet 🎾 Prédiction !")
+        st.info("📭 Aucune prédiction dans l'historique.")
         return
 
-    # ── Calcul des stats ──
+    # Stats rapides
     total = len(historique)
     avec_res = [h for h in historique if h.get('resultat_reel')]
-    corrects = [h for h in avec_res if h.get('resultat_reel') == h.get('vainqueur')]
-    incorrects = [h for h in avec_res if h.get('resultat_reel') != h.get('vainqueur')]
+    corrects = [h for h in avec_res if h.get('resultat_reel', '').lower().split()[-1] == h.get('vainqueur', '').lower().split()[-1]]
+    incorrects = [h for h in avec_res if h not in corrects]
     en_attente = total - len(avec_res)
     pct_ok = round(len(corrects) / len(avec_res) * 100, 1) if avec_res else 0
 
-    # ── Série en cours ──
+    # Série en cours
     serie_en_cours = 0
-    for h in avec_res:
-        if h.get('resultat_reel') == h.get('vainqueur'):
-            serie_en_cours += 1
-        else:
-            break
+    for h in historique:
+        if h.get('resultat_reel'):
+            if h.get('resultat_reel', '').lower().split()[-1] == h.get('vainqueur', '').lower().split()[-1]:
+                serie_en_cours += 1
+            else:
+                break
 
-    # ── Métriques principales ──
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric("📋 Total", total)
-    with col2:
-        st.metric("✅ Correctes", len(corrects))
-    with col3:
-        st.metric("❌ Incorrectes", len(incorrects))
-    with col4:
-        st.metric("📊 Précision", f"{pct_ok}%")
-    with col5:
-        st.metric("🔥 Série", f"{serie_en_cours}")
+    col_stats, col_pie, col_resume = st.columns([1, 1, 1])
 
-    # ── Graphique circulaire ──
-    if avec_res or en_attente > 0:
-        col_graph, col_resume = st.columns([2, 1])
+    with col_stats:
+        st.metric("📊 Total", total)
+        st.metric("✅ Corrects", len(corrects))
+        st.metric("❌ Incorrects", len(incorrects))
+        st.metric("⏳ En attente", en_attente)
 
-        with col_graph:
-            fig_pie = go.Figure(data=[go.Pie(
-                labels=['✅ Correctes', '❌ Incorrectes', '⏳ En attente'],
+    with col_pie:
+        if avec_res:
+            fig_pie = go.Figure([go.Pie(
+                labels=['✅ Corrects', '❌ Incorrects', '⏳ En attente'],
                 values=[len(corrects), len(incorrects), en_attente],
                 marker_colors=['#2d9e56', '#e74c3c', '#f39c12'],
                 hole=0.5,
@@ -373,25 +398,25 @@ def page_historique():
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        with col_resume:
-            st.markdown("### 📈 Résumé")
-            if pct_ok >= 70:
-                st.success(f"🏆 Excellent ! Tu as {pct_ok}% de réussite")
-            elif pct_ok >= 55:
-                st.info(f"👍 Bien joué ! {pct_ok}% de réussite")
-            elif pct_ok > 0:
-                st.warning(f"📊 {pct_ok}% de réussite — continue !")
-            else:
-                st.info("⏳ Résultats en attente...")
+    with col_resume:
+        st.markdown("### 📈 Résumé")
+        if pct_ok >= 70:
+            st.success(f"🏆 Excellent ! Tu as {pct_ok}% de réussite")
+        elif pct_ok >= 55:
+            st.info(f"👍 Bien joué ! {pct_ok}% de réussite")
+        elif pct_ok > 0:
+            st.warning(f"📊 {pct_ok}% de réussite — continue !")
+        else:
+            st.info("⏳ Résultats en attente...")
 
-            if serie_en_cours >= 5:
-                st.success(f"🔥 Série de {serie_en_cours} victoires !")
-            elif serie_en_cours >= 3:
-                st.info(f"🔥 Série de {serie_en_cours} victoires")
+        if serie_en_cours >= 5:
+            st.success(f"🔥 Série de {serie_en_cours} victoires !")
+        elif serie_en_cours >= 3:
+            st.info(f"🔥 Série de {serie_en_cours} victoires")
 
     st.markdown("---")
 
-    # ── Vérification automatique ──
+    # Vérification automatique
     col_btn1, col_btn2 = st.columns([2, 3])
     with col_btn1:
         if st.button("🔍 Vérifier résultats via API", type="primary"):
@@ -412,10 +437,10 @@ def page_historique():
 
     st.markdown("---")
 
-    # ── Liste des prédictions ──
+    # Liste des prédictions
     st.subheader("📋 Détail des prédictions")
 
-    for i, h in enumerate(historique):
+    for i, h in enumerate(historique[:50]):  # Limiter à 50 pour performance
         res_reel  = h.get('resultat_reel', '')
         vainqueur = h.get('vainqueur', '')
         est_supprime = h.get('deleted', False)
@@ -429,15 +454,10 @@ def page_historique():
             badge, couleur = "⏳", "warning"
 
         with st.container():
-            col_badge, col_match, col_resultat, col_action = st.columns([1, 4, 3, 1])
+            col_badge, col_match, col_resultat = st.columns([1, 4, 3])
 
             with col_badge:
-                if couleur == "success":
-                    st.markdown(f"<div style='font-size:2rem;text-align:center;'>{badge}</div>", unsafe_allow_html=True)
-                elif couleur == "error":
-                    st.markdown(f"<div style='font-size:2rem;text-align:center;'>{badge}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div style='font-size:2rem;text-align:center;'>{badge}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:2rem;text-align:center;'>{badge}</div>", unsafe_allow_html=True)
 
             with col_match:
                 prefix = "🗑️ " if est_supprime else ""
@@ -452,73 +472,13 @@ def page_historique():
                     f"🏆 {res_reel if res_reel else 'En attente'} {h.get('score_reel', '')}"
                 )
 
-            with col_action:
-                if not est_admin and not est_supprime:
-                    if st.button("🗑️", key=f"del_{i}_{h.get('date','')}", help="Supprimer"):
-                        historique_user = charger_historique(user_id=user_id, inclure_supprimes=False)
-                        for j, hc in enumerate(historique_user):
-                            if (hc.get('date') == h.get('date') and
-                                hc.get('joueur_a') == h.get('joueur_a') and
-                                hc.get('joueur_b') == h.get('joueur_b')):
-                                historique_user[j]['deleted'] = True
-                                historique_user[j]['deleted_at'] = datetime.now().isoformat()
-                                break
-                        sauvegarder_historique(historique_user)
-                        st.success("✅ Supprimée")
-                        st.rerun()
-
-                if est_admin and est_supprime:
-                    st.caption(f"🗑️ {h.get('deleted_at', '')[:10]}")
-
         st.markdown("---")
 
-    # ── Saisie manuelle ──
-    st.subheader("✏️ Saisir un résultat")
-
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        id_pred = st.number_input("ID", min_value=1, max_value=total, value=1, step=1)
-    with col_r2:
-        pred = historique[id_pred - 1]
-        choix = st.selectbox("Vainqueur réel", [pred.get('joueur_a', 'A'), pred.get('joueur_b', 'B')])
-
-    score = st.text_input("Score (optionnel)", placeholder="6-3 6-4")
-
-    if st.button("💾 Enregistrer", type="primary"):
-        historique[id_pred - 1]['resultat_reel'] = choix
-        if score:
-            historique[id_pred - 1]['score_reel'] = score
-        sauvegarder_historique(historique)
-        st.success(f"✅ Enregistré : {choix}")
-        st.rerun()
-
-    st.markdown("---")
-
-    # ── Stats par surface ──
-    if avec_res:
-        st.subheader("📊 Précision par surface")
-        surfaces = {}
-        for h in avec_res:
-            surf = h.get('surface', 'Unknown')
-            if surf not in surfaces:
-                surfaces[surf] = {'total': 0, 'correct': 0}
-            surfaces[surf]['total'] += 1
-            if h.get('resultat_reel') == h.get('vainqueur'):
-                surfaces[surf]['correct'] += 1
-
-        rows = []
-        for surf, stats in surfaces.items():
-            pct = round(stats['correct'] / stats['total'] * 100, 1) if stats['total'] > 0 else 0
-            rows.append({'Surface': surf, 'Total': stats['total'], 'Corrects': stats['correct'], 'Précision': f"{pct}%"})
-
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-
-    # ── Export CSV ──
-    st.markdown("---")
+    # Export CSV
     st.subheader("📥 Exporter")
 
     rows_csv = []
-    for i, h in enumerate(historique):
+    for h in historique:
         res = h.get('resultat_reel', '')
         v = h.get('vainqueur', '')
         correct = "OUI" if res and v and res.lower().split()[-1] == v.lower().split()[-1] else ("NON" if res else "EN ATTENTE")

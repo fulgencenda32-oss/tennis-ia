@@ -10,6 +10,7 @@ Fonctionnalités :
 - Mode Anonyme (3 jours)
 - Compte Admin (fulgencenda32@gmail.com)
 - Mode gratuit avec limites + cadenas Premium
+- 🔧 Protection contre erreur 429 Firestore
 """
 
 import streamlit as st
@@ -19,6 +20,7 @@ from datetime import datetime, date, timedelta
 import os
 import json
 import requests
+import time  # 🔧 Ajout pour gestion du timing
 
 # ─────────────────────────────────────────────
 # CONFIGURATION
@@ -40,11 +42,23 @@ FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "") or "AIzaSyA0rB2KDA4hyiEFoPT
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "tennis-ia")
 
 # ─────────────────────────────────────────────
-# INITIALISATION FIREBASE
+# 🔧 CACHE GLOBAL POUR ÉVITER ERREUR 429
+# ─────────────────────────────────────────────
+_FIREBASE_DB_CACHE = None
+_FIREBASE_ERROR_TIME = 0
+_FIREBASE_INIT_DONE = False
+
+# ─────────────────────────────────────────────
+# INITIALISATION FIREBASE — SÉCURISÉE
 # ─────────────────────────────────────────────
 
 def init_firebase():
     """Initialise Firebase Admin SDK si pas déjà fait."""
+    global _FIREBASE_INIT_DONE
+    
+    if _FIREBASE_INIT_DONE:
+        return True
+        
     if not firebase_admin._apps:
         try:
             cred_path = "data/firebase_key.json"
@@ -52,21 +66,46 @@ def init_firebase():
                 cred = credentials.Certificate(cred_path)
                 firebase_admin.initialize_app(cred)
             elif os.getenv('FIREBASE_KEY'):
-                import json
                 cle_json = json.loads(os.getenv('FIREBASE_KEY'))
                 cred = credentials.Certificate(cle_json)
                 firebase_admin.initialize_app(cred)
             else:
                 firebase_admin.initialize_app()
+            _FIREBASE_INIT_DONE = True
         except Exception as e:
-            st.error(f"Erreur Firebase : {e}")
+            # 🔧 Ne pas afficher d'erreur bloquante
             return False
+    else:
+        _FIREBASE_INIT_DONE = True
     return True
 
+
 def get_db():
-    """Retourne le client Firestore."""
-    init_firebase()
-    return firestore.client()
+    """
+    Retourne le client Firestore avec cache et protection erreur 429.
+    Ne retente pas pendant 5 minutes après une erreur.
+    """
+    global _FIREBASE_DB_CACHE, _FIREBASE_ERROR_TIME
+    
+    # 🔧 Si erreur récente (moins de 5 min), ne pas retenter
+    if _FIREBASE_ERROR_TIME and (time.time() - _FIREBASE_ERROR_TIME) < 300:
+        return None
+    
+    # 🔧 Si déjà connecté, retourner le cache
+    if _FIREBASE_DB_CACHE is not None:
+        return _FIREBASE_DB_CACHE
+    
+    try:
+        if not init_firebase():
+            return None
+        _FIREBASE_DB_CACHE = firestore.client()
+        return _FIREBASE_DB_CACHE
+    except Exception as e:
+        error_str = str(e).lower()
+        if "429" in str(e) or "quota" in error_str or "exceeded" in error_str:
+            _FIREBASE_ERROR_TIME = time.time()
+        return None
+
 
 # ─────────────────────────────────────────────
 # GESTION SESSION STREAMLIT
@@ -112,6 +151,22 @@ def is_anonyme():
         return True
     email = user.get("email", "")
     return not email or email == "anonyme@tennis-ia.app"
+
+# ─────────────────────────────────────────────
+# 🔧 FONCTIONS DE PERMISSION (pour prediction.py)
+# ─────────────────────────────────────────────
+
+def peut_voir_ia_supreme():
+    """Vérifie si l'utilisateur peut voir l'IA Suprême."""
+    return is_premium() or is_admin()
+
+def peut_voir_consensus():
+    """Vérifie si l'utilisateur peut voir le consensus des 4 IA."""
+    return is_premium() or is_admin()
+
+def peut_voir_value_bet_detail():
+    """Vérifie si l'utilisateur peut voir les détails des value bets."""
+    return is_premium() or is_admin()
 
 # ─────────────────────────────────────────────
 # MODE INVITÉ — Gestion 3 jours
@@ -278,7 +333,7 @@ def connexion_email(email, mot_de_passe):
         "returnSecureToken": True
     }
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=10)
         data = response.json()
         if "idToken" in data:
             return {"success": True, "token": data["idToken"], "uid": data["localId"], "email": data["email"]}
@@ -303,7 +358,7 @@ def inscription_email(email, mot_de_passe, nom):
         "returnSecureToken": True
     }
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=10)
         data = response.json()
         if "idToken" in data:
             # Créer le profil dans Firestore
@@ -325,7 +380,7 @@ def connexion_anonyme():
     url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={FIREBASE_API_KEY}"
     payload = {"returnSecureToken": True}
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=10)
         data = response.json()
         if "idToken" in data:
             return {"success": True, "token": data["idToken"], "uid": data["localId"], "email": None}
@@ -343,57 +398,77 @@ def deconnexion():
     st.rerun()
 
 # ─────────────────────────────────────────────
-# GESTION PROFILS FIRESTORE
+# GESTION PROFILS FIRESTORE — SÉCURISÉE
 # ─────────────────────────────────────────────
 
 def creer_profil_utilisateur(uid, email, nom="Utilisateur"):
     """Crée le profil d'un nouvel utilisateur dans Firestore."""
+    profil = {
+        "uid": uid,
+        "email": email,
+        "nom": ADMIN_NAME if email == ADMIN_EMAIL else nom,
+        "role": "admin" if email == ADMIN_EMAIL else "user",
+        "plan": "premium" if email == ADMIN_EMAIL else "gratuit",
+        "date_inscription": datetime.now().isoformat(),
+        "predictions_aujourd_hui": 0,
+        "date_derniere_prediction": None,
+        "actif": True,
+    }
+    
     try:
         db = get_db()
-        est_admin = email == ADMIN_EMAIL
-        profil = {
-            "uid": uid,
-            "email": email,
-            "nom": ADMIN_NAME if est_admin else nom,
-            "role": "admin" if est_admin else "user",
-            "plan": "premium" if est_admin else "gratuit",
-            "date_inscription": datetime.now().isoformat(),
-            "predictions_aujourd_hui": 0,
-            "date_derniere_prediction": None,
-            "actif": True,
-        }
-        db.collection("users").document(uid).set(profil)
-        return profil
+        if db:
+            db.collection("users").document(uid).set(profil)
     except Exception as e:
-        st.warning(f"Profil non sauvegardé en cloud : {e}")
-        return None
+        # 🔧 Silencieux si erreur 429
+        pass
+    
+    return profil
+
 
 def charger_profil_utilisateur(uid, email):
-    """Charge le profil depuis Firestore, le crée si absent. Cache en session pour éviter 429."""
+    """
+    Charge le profil depuis Firestore avec cache session et protection 429.
+    Retourne toujours un profil valide (local si Firebase indisponible).
+    """
     cache_key = f"profil_cache_{uid}"
-    if st.session_state.get(cache_key):
+    
+    # 🔧 Toujours utiliser le cache s'il existe
+    if cache_key in st.session_state and st.session_state[cache_key]:
         return st.session_state[cache_key]
+    
+    # 🔧 Profil par défaut (utilisé si Firebase indisponible)
+    profil_defaut = {
+        "uid": uid,
+        "email": email,
+        "nom": ADMIN_NAME if email == ADMIN_EMAIL else "Utilisateur",
+        "role": "admin" if email == ADMIN_EMAIL else "user",
+        "plan": "premium" if email == ADMIN_EMAIL else "gratuit",
+        "predictions_aujourd_hui": 0,
+        "date_inscription": datetime.now().isoformat(),
+        "actif": True,
+    }
+    
     try:
         db = get_db()
-        doc = db.collection("users").document(uid).get()
-        if doc.exists:
-            profil = doc.to_dict()
-        else:
-            profil = creer_profil_utilisateur(uid, email)
-        st.session_state[cache_key] = profil
-        return profil
+        if db:
+            doc = db.collection("users").document(uid).get()
+            if doc.exists:
+                profil = doc.to_dict()
+                st.session_state[cache_key] = profil
+                return profil
+            else:
+                # Créer le profil
+                profil = creer_profil_utilisateur(uid, email)
+                st.session_state[cache_key] = profil
+                return profil
     except Exception as e:
-        # Mode hors-ligne : profil minimal local
-        return {
-            "uid": uid,
-            "email": email,
-            "nom": ADMIN_NAME if email == ADMIN_EMAIL else "Utilisateur",
-            "role": "admin" if email == ADMIN_EMAIL else "user",
-            "plan": "premium" if email == ADMIN_EMAIL else "gratuit",
-            "predictions_aujourd_hui": 0,
-            "date_inscription": datetime.now().isoformat(),
-            "actif": True,
-        }
+        # 🔧 Mode hors-ligne : utiliser le profil par défaut
+        pass
+    
+    st.session_state[cache_key] = profil_defaut
+    return profil_defaut
+
 
 def connecter_utilisateur(result, nom="Utilisateur"):
     """Finalise la connexion et charge le profil."""
@@ -456,16 +531,21 @@ def incrementer_compteur_predictions():
 
     try:
         aujourd_hui = date.today().isoformat()
-        db = get_db()
-        uid = user.get("uid")
-        db.collection("users").document(uid).update({
-            "predictions_aujourd_hui": firestore.Increment(1),
-            "date_derniere_prediction": aujourd_hui
-        })
-        # Mise à jour locale
+        
+        # 🔧 Mise à jour locale d'abord (toujours fonctionne)
         st.session_state.user["predictions_aujourd_hui"] = user.get("predictions_aujourd_hui", 0) + 1
         st.session_state.user["date_derniere_prediction"] = aujourd_hui
+        
+        # 🔧 Puis tenter Firebase (peut échouer silencieusement)
+        db = get_db()
+        if db:
+            uid = user.get("uid")
+            db.collection("users").document(uid).update({
+                "predictions_aujourd_hui": firestore.Increment(1),
+                "date_derniere_prediction": aujourd_hui
+            })
     except Exception as e:
+        # 🔧 Silencieux si erreur 429
         pass
 
 # ─────────────────────────────────────────────
@@ -585,8 +665,11 @@ def afficher_panel_admin():
     """Affiche le panel d'administration (visible uniquement pour l'admin)."""
     if not is_admin():
         return
-    from modules.admin import afficher_panel_admin_complet
-    afficher_panel_admin_complet()
+    try:
+        from modules.admin import afficher_panel_admin_complet
+        afficher_panel_admin_complet()
+    except Exception:
+        st.error("Module admin non disponible")
 
 # ─────────────────────────────────────────────
 # INTERFACE DE CONNEXION
@@ -762,9 +845,6 @@ def afficher_barre_utilisateur():
 # ─────────────────────────────────────────────
 
 def afficher_reset_password():
-    import streamlit as st
-    import requests
-
     st.markdown("## 🔑 Récupération d'accès")
 
     choix = st.radio(
@@ -786,7 +866,7 @@ def afficher_reset_password():
                         "email": email
                     }
 
-                    response = requests.post(url, json=payload)
+                    response = requests.post(url, json=payload, timeout=10)
                     data = response.json()
 
                     if response.status_code == 200:
