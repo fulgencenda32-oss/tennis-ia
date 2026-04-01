@@ -220,6 +220,15 @@ from modules.onboarding import afficher_onboarding
 if afficher_onboarding():
     st.stop()
 
+    # ============================================================
+# VÉRIFICATION MODE INVITÉ (3 jours)
+# ============================================================
+from modules.auth import is_anonyme, mode_invite_expire, afficher_popup_inscription
+
+if mode_invite_expire():
+    afficher_popup_inscription()
+    st.stop()
+
 # ============================================================
 # REDÉFINITION simplifier_round
 # ============================================================

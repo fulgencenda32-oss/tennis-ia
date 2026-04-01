@@ -1,4 +1,3 @@
-
 SURFACE_TOURNOI = {
     # Hard
     "miami": "Hard", "australian open": "Hard", "us open": "Hard",
@@ -29,7 +28,6 @@ def detecter_surface(nom_tournoi):
             return surface
     return "Hard"
 
-# v2 - groupes par tournoi
 # ============================================================
 # MODULE MATCHS DU JOUR
 # ============================================================
@@ -61,7 +59,6 @@ def est_hors_ligne():
 # RECUPERATION MATCHS
 # ============================================================
 def get_matchs_periode(date_debut, date_fin, api_key=None):
-    """Récupère les matchs via rotation intelligente de clés API + cache."""
     resultat = appel_api(
         {"met": "Fixtures", "from": date_debut, "to": date_fin},
         utiliser_cache=True
@@ -158,7 +155,7 @@ def afficher_resultat_pred(res, j_a, j_b, surface):
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
-# PAGE MATCHS DU JOUR
+# PAGE MATCHS DU JOUR — avec cadenas Premium
 # ============================================================
 def page_matchs_jour(modeles, df_base):
     st.title("Matchs du jour")
@@ -175,7 +172,28 @@ def page_matchs_jour(modeles, df_base):
         st.markdown("<br>", unsafe_allow_html=True)
         charger = st.button("Charger", type="primary")
 
-    predire_tous = st.button("Predire TOUS les matchs automatiquement")
+    # ── Vérification limites pour "Prédire TOUS" ──
+    from modules.auth import peut_faire_prediction, is_admin, is_premium, \
+        get_predictions_restantes, afficher_cadenas, afficher_message_apres_limite, \
+        mode_invite_expire, afficher_popup_inscription
+
+    # Vérifier si mode invité expiré
+    if mode_invite_expire():
+        afficher_popup_inscription()
+        return
+
+    peut, msg_limite = peut_faire_prediction()
+    restantes = get_predictions_restantes()
+
+    if peut:
+        predire_tous = st.button("Predire TOUS les matchs automatiquement")
+    else:
+        predire_tous = False
+        afficher_cadenas(
+            f"🔒 {msg_limite}",
+            bouton_premium=True
+        )
+
     st.markdown("---")
 
     if charger or predire_tous or st.session_state.get("auto_charger"):
@@ -197,11 +215,9 @@ def page_matchs_jour(modeles, df_base):
             st.warning("Aucun match trouve.")
             return
 
-        # Sauvegarder dans session_state pour persistance
         st.session_state["df_matchs_jour"] = df_matchs
         st.session_state["date_matchs"] = date_str
 
-    # Lire depuis session_state
     if "df_matchs_jour" not in st.session_state:
         st.info("Cliquez sur Charger pour voir les matchs.")
         return
@@ -230,13 +246,23 @@ def page_matchs_jour(modeles, df_base):
     if predire_tous:
         st.subheader("Predictions automatiques")
         from modules.prediction import predire_match
+        from modules.auth import incrementer_compteur_predictions
         a_predire = df_matchs[~df_matchs["statut_low"].isin(["finished"])].head(30)
         if a_predire.empty:
             st.info("Aucun match a venir.")
         else:
             barre = st.progress(0)
             resultats = []
+            nb_predits = 0
             for i, (_, match) in enumerate(a_predire.iterrows()):
+                # Vérifier limite à chaque prédiction
+                if not is_admin() and not is_premium():
+                    r = get_predictions_restantes()
+                    if r <= 0:
+                        st.warning(f"⚠️ Limite atteinte après {nb_predits} prédiction(s).")
+                        afficher_message_apres_limite()
+                        break
+
                 j_a_raw = match["Joueur A"]
                 j_b_raw = match["Joueur B"]
                 if "/" in j_a_raw or "/" in j_b_raw:
@@ -253,6 +279,8 @@ def page_matchs_jour(modeles, df_base):
                         "Probabilite": f"{res['proba_v']}%", "Score predit": res["score_exact"],
                         "Sets": res["nb_sets"], "Handicap": res["handicap"],
                     })
+                    incrementer_compteur_predictions()
+                    nb_predits += 1
                 except:
                     resultats.append({
                         "Joueur A": j_a_raw, "Joueur B": j_b_raw,
@@ -289,6 +317,7 @@ def page_matchs_jour(modeles, df_base):
     if not df_a_venir.empty:
         st.subheader(f"A venir ({len(df_a_venir)})")
         from modules.prediction import predire_match
+        from modules.auth import incrementer_compteur_predictions
 
         tournois = df_a_venir["Tournoi"].unique()
         for tournoi in tournois:
@@ -300,7 +329,6 @@ def page_matchs_jour(modeles, df_base):
                     j_b_raw   = match["Joueur B"]
                     event_key = match["event_key"]
 
-                    # Ignorer doubles
                     if "/" in j_a_raw or "/" in j_b_raw:
                         continue
 
@@ -313,18 +341,26 @@ def page_matchs_jour(modeles, df_base):
                     with col_vs:  st.markdown("**vs**")
                     with col_b:   st.markdown(f"{j_b_raw}")
                     with col_btn:
-                        if st.button("Predire", key=f"pred_{event_key}_{i}"):
-                            j_a = trouver_nom_base(j_a_raw, liste_joueurs) or j_a_raw
-                            j_b = trouver_nom_base(j_b_raw, liste_joueurs) or j_b_raw
-                            try:
-                                res = predire_match(j_a, j_b, modeles, df_base,
-                                    surface="Hard", tournoi=t, round_match=str(match["Round"]))
-                                st.session_state["pred_resultats"][event_key] = {
-                                    "res": res, "j_a": j_a, "j_b": j_b,
-                                    "j_a_raw": j_a_raw, "j_b_raw": j_b_raw
-                                }
-                            except Exception as e:
-                                st.session_state["pred_resultats"][event_key] = {"erreur": str(e)}
+                        # ── Vérification limite avant chaque bouton Prédire ──
+                        peut_pred, msg_pred = peut_faire_prediction()
+
+                        if peut_pred:
+                            if st.button("Predire", key=f"pred_{event_key}_{i}"):
+                                j_a = trouver_nom_base(j_a_raw, liste_joueurs) or j_a_raw
+                                j_b = trouver_nom_base(j_b_raw, liste_joueurs) or j_b_raw
+                                try:
+                                    res = predire_match(j_a, j_b, modeles, df_base,
+                                        surface="Hard", tournoi=t, round_match=str(match["Round"]))
+                                    st.session_state["pred_resultats"][event_key] = {
+                                        "res": res, "j_a": j_a, "j_b": j_b,
+                                        "j_a_raw": j_a_raw, "j_b_raw": j_b_raw
+                                    }
+                                    incrementer_compteur_predictions()
+                                except Exception as e:
+                                    st.session_state["pred_resultats"][event_key] = {"erreur": str(e)}
+                        else:
+                            # Bouton avec cadenas
+                            st.button("🔒 Predire", key=f"pred_lock_{event_key}_{i}", disabled=True)
 
                     # Afficher resultat si disponible
                     if event_key in st.session_state["pred_resultats"]:
@@ -336,3 +372,8 @@ def page_matchs_jour(modeles, df_base):
                             afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], detecter_surface(data.get("tournoi", "")))
                         st.info("💡 Pour une prediction plus precise, utilisez l'onglet Prediction avec toutes les donnees : surface exacte, round, format et cotes du match.")
                     st.divider()
+
+        # ── Message limite si toutes les prédictions sont épuisées ──
+        if not peut:
+            st.markdown("---")
+            afficher_message_apres_limite()

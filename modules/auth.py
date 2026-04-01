@@ -7,15 +7,15 @@ Fonctionnalités :
 - Connexion Email / Mot de passe
 - Connexion Google
 - Connexion Numéro de téléphone (OTP)
-- Mode Anonyme
+- Mode Anonyme (3 jours)
 - Compte Admin (fulgencenda32@gmail.com)
-- Mode gratuit illimité (structure prête pour le payant)
+- Mode gratuit avec limites + cadenas Premium
 """
 
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import os
 import json
 import requests
@@ -28,13 +28,14 @@ ADMIN_EMAIL = "fulgencenda32@gmail.com"
 ADMIN_NAME = "Fulgence N'da"
 
 # Mode payant : False = tout le monde accède librement
-# Pour activer le payant, mettre True
 MODE_PAYANT = True
 
-# Limites en mode gratuit (ignorées si MODE_PAYANT = True)
+# Limites en mode gratuit
 LIMITE_PREDICTIONS_GRATUITES = 2  # par jour
+BONUS_INSCRIPTION = 5  # prédictions bonus le jour de l'inscription
+DUREE_MODE_INVITE_JOURS = 3  # durée du mode invité sans inscription
 
-# Firebase Web API Key (à mettre dans .env)
+# Firebase Web API Key
 FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "") or "AIzaSyA0rB2KDA4hyiEFoPTctapHDCDV98iOGW4"
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "tennis-ia")
 
@@ -103,6 +104,164 @@ def is_premium():
     if user:
         return user.get("plan") == "premium"
     return False
+
+def is_anonyme():
+    """Vérifie si l'utilisateur est en mode anonyme/invité."""
+    user = get_user()
+    if not user:
+        return True
+    email = user.get("email", "")
+    return not email or email == "anonyme@tennis-ia.app"
+
+# ─────────────────────────────────────────────
+# MODE INVITÉ — Gestion 3 jours
+# ─────────────────────────────────────────────
+
+def get_jours_restants_invite():
+    """
+    Retourne le nombre de jours restants en mode invité.
+    Retourne -1 si pas en mode invité.
+    Retourne 0 si expiré.
+    """
+    user = get_user()
+    if not user:
+        return -1
+
+    if not is_anonyme():
+        return -1  # Pas un invité
+
+    date_inscription = user.get("date_inscription", "")
+    if not date_inscription:
+        return DUREE_MODE_INVITE_JOURS
+
+    try:
+        date_debut = datetime.fromisoformat(date_inscription)
+        date_expiration = date_debut + timedelta(days=DUREE_MODE_INVITE_JOURS)
+        maintenant = datetime.now()
+
+        if maintenant >= date_expiration:
+            return 0  # Expiré
+
+        delta = date_expiration - maintenant
+        # Retourner les jours + heures restants
+        return max(0, delta.days + (1 if delta.seconds > 0 else 0))
+    except:
+        return DUREE_MODE_INVITE_JOURS
+
+def get_temps_restant_invite_str():
+    """Retourne le temps restant formaté pour l'affichage."""
+    user = get_user()
+    if not user or not is_anonyme():
+        return ""
+
+    date_inscription = user.get("date_inscription", "")
+    if not date_inscription:
+        return f"{DUREE_MODE_INVITE_JOURS}j 0h"
+
+    try:
+        date_debut = datetime.fromisoformat(date_inscription)
+        date_expiration = date_debut + timedelta(days=DUREE_MODE_INVITE_JOURS)
+        delta = date_expiration - datetime.now()
+
+        if delta.total_seconds() <= 0:
+            return "Expiré"
+
+        jours = delta.days
+        heures = delta.seconds // 3600
+        return f"{jours}j {heures}h"
+    except:
+        return f"{DUREE_MODE_INVITE_JOURS}j 0h"
+
+def mode_invite_expire():
+    """Vérifie si le mode invité a expiré."""
+    return is_anonyme() and get_jours_restants_invite() == 0
+
+def afficher_popup_inscription():
+    """Affiche un pop-up doux pour inviter à s'inscrire."""
+    st.markdown("""
+    <div style='
+        background: linear-gradient(135deg, rgba(45,158,86,0.2), rgba(45,158,86,0.05));
+        border: 2px solid rgba(45,158,86,0.5);
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        margin: 2rem 0;
+        animation: fadeIn 0.5s ease-out;
+    '>
+        <div style='font-size: 3rem; margin-bottom: 1rem;'>🎾</div>
+        <h2 style='color: #4ade80; margin-bottom: 1rem;'>Ton mode invité a expiré !</h2>
+        <p style='color: rgba(255,255,255,0.8); font-size: 1.1rem; margin-bottom: 1.5rem;'>
+            Tu as profité de <strong>3 jours gratuits</strong> sans inscription.<br>
+            Crée ton compte maintenant pour continuer à utiliser Tennis IA !
+        </p>
+        <div style='
+            background: rgba(45,158,86,0.15);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        '>
+            <p style='color: #4ade80; font-weight: 600; margin: 0;'>
+                🎁 Bonus inscription : <strong>5 prédictions gratuites</strong> offertes !
+            </p>
+        </div>
+        <p style='color: rgba(255,255,255,0.6); font-size: 0.9rem;'>
+            Inscription gratuite · 30 secondes · Email uniquement
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# COMPTEUR DE PRÉDICTIONS
+# ─────────────────────────────────────────────
+
+def get_predictions_restantes():
+    """
+    Retourne le nombre de prédictions restantes aujourd'hui.
+    Retourne -1 si illimité (admin/premium).
+    """
+    if not MODE_PAYANT:
+        return -1
+
+    if is_admin() or is_premium():
+        return -1  # Illimité
+
+    user = get_user()
+    if not user:
+        return 0
+
+    aujourd_hui = date.today().isoformat()
+    derniere = user.get("date_derniere_prediction", "")
+    compteur = user.get("predictions_aujourd_hui", 0)
+
+    # Réinitialiser si nouveau jour
+    if derniere != aujourd_hui:
+        compteur = 0
+
+    # Bonus inscription (jour de l'inscription)
+    date_inscription = str(user.get("date_inscription", ""))[:10]
+    limite = LIMITE_PREDICTIONS_GRATUITES
+    if date_inscription == aujourd_hui:
+        limite = BONUS_INSCRIPTION
+
+    restantes = max(0, limite - compteur)
+    return restantes
+
+def get_limite_du_jour():
+    """Retourne la limite de prédictions pour aujourd'hui."""
+    if not MODE_PAYANT or is_admin() or is_premium():
+        return -1
+
+    user = get_user()
+    if not user:
+        return LIMITE_PREDICTIONS_GRATUITES
+
+    date_inscription = str(user.get("date_inscription", ""))[:10]
+    aujourd_hui = date.today().isoformat()
+
+    if date_inscription == aujourd_hui:
+        return BONUS_INSCRIPTION
+
+    return LIMITE_PREDICTIONS_GRATUITES
 
 # ─────────────────────────────────────────────
 # AUTHENTIFICATION VIA FIREBASE REST API
@@ -180,6 +339,7 @@ def deconnexion():
     st.session_state.user = None
     st.session_state.token = None
     st.session_state.connecte = False
+    st.session_state.pop("onboarding_complete", None)
     st.rerun()
 
 # ─────────────────────────────────────────────
@@ -231,6 +391,7 @@ def charger_profil_utilisateur(uid, email):
             "role": "admin" if email == ADMIN_EMAIL else "user",
             "plan": "premium" if email == ADMIN_EMAIL else "gratuit",
             "predictions_aujourd_hui": 0,
+            "date_inscription": datetime.now().isoformat(),
             "actif": True,
         }
 
@@ -269,20 +430,18 @@ def peut_faire_prediction():
     if is_admin() or is_premium():
         return True, ""
 
+    # Mode invité expiré
+    if mode_invite_expire():
+        return False, "Ton mode invité de 3 jours a expiré. Crée un compte pour continuer !"
+
     user = get_user()
     if not user:
         return False, "Vous devez être connecté."
 
-    # Réinitialiser le compteur si nouveau jour
-    aujourd_hui = date.today().isoformat()
-    derniere = user.get("date_derniere_prediction", "")
-    compteur = user.get("predictions_aujourd_hui", 0)
-
-    if derniere != aujourd_hui:
-        compteur = 0
-
-    if compteur >= LIMITE_PREDICTIONS_GRATUITES:
-        return False, f"Limite journalière atteinte ({LIMITE_PREDICTIONS_GRATUITES} prédictions/jour en gratuit). Passez en Premium pour un accès illimité !"
+    restantes = get_predictions_restantes()
+    if restantes <= 0:
+        limite = get_limite_du_jour()
+        return False, f"Limite atteinte ({limite} prédictions/jour en gratuit). Passe en Premium pour un accès illimité !"
 
     return True, ""
 
@@ -308,6 +467,115 @@ def incrementer_compteur_predictions():
         st.session_state.user["date_derniere_prediction"] = aujourd_hui
     except Exception as e:
         pass
+
+# ─────────────────────────────────────────────
+# CADENAS PREMIUM — Affichage bloqué avec explication
+# ─────────────────────────────────────────────
+
+def afficher_cadenas(message="Cette fonctionnalité est réservée aux membres Premium.", 
+                     bouton_premium=True):
+    """
+    Affiche un cadenas 🔒 avec un message explicatif.
+    Ne bloque jamais silencieusement — explique toujours pourquoi et comment débloquer.
+    """
+    st.markdown(f"""
+    <div style='
+        background: rgba(245,158,11,0.1);
+        border: 1px solid rgba(245,158,11,0.4);
+        border-radius: 12px;
+        padding: 1.2rem;
+        text-align: center;
+        margin: 0.5rem 0;
+    '>
+        <span style='font-size: 2rem;'>🔒</span>
+        <p style='color: rgba(255,255,255,0.8); margin: 0.5rem 0 0 0; font-size: 0.95rem;'>
+            {message}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if bouton_premium:
+        st.markdown(
+            "<p style='text-align:center; color:#f59e0b; font-size:0.85rem;'>"
+            "⭐ Passe en Premium pour débloquer → onglet Premium</p>",
+            unsafe_allow_html=True
+        )
+
+def afficher_prediction_floutee(res):
+    """
+    Affiche une prédiction floutée quand la limite gratuite est atteinte.
+    L'utilisateur voit qu'il y a un résultat mais ne peut pas le lire.
+    """
+    st.markdown(f"""
+    <div style='
+        background: rgba(45,158,86,0.1);
+        border: 1px solid rgba(45,158,86,0.3);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        margin: 1rem 0;
+        position: relative;
+    '>
+        <div style='filter: blur(8px); pointer-events: none;'>
+            <h3 style='color: #4ade80;'>🏆 Vainqueur : ████████</h3>
+            <p style='color: rgba(255,255,255,0.7);'>
+                Probabilité : ██.█% · Score : █-█ █-█ · Sets : █
+            </p>
+        </div>
+        <div style='
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            border-radius: 12px;
+            padding: 1rem 2rem;
+        '>
+            <span style='font-size: 2rem;'>🔒</span>
+            <p style='color: #f59e0b; font-weight: 600; margin: 0.5rem 0 0 0;'>
+                Limite atteinte — Passe en Premium !
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def afficher_message_apres_limite():
+    """
+    Affiche un message engageant après que l'utilisateur atteint sa limite.
+    """
+    st.markdown("""
+    <div style='
+        background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05));
+        border: 1px solid rgba(245,158,11,0.4);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+    '>
+        <h3 style='color: #f59e0b; text-align: center;'>
+            Tu as utilisé toutes tes prédictions du jour !
+        </h3>
+        <p style='color: rgba(255,255,255,0.8); text-align: center; margin-bottom: 1rem;'>
+            Voici ce que tu rates en restant en gratuit :
+        </p>
+        <div style='display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;'>
+            <span style='background: rgba(45,158,86,0.2); padding: 0.4rem 0.8rem; border-radius: 8px; font-size: 0.85rem;'>
+                ♾️ Prédictions illimitées
+            </span>
+            <span style='background: rgba(45,158,86,0.2); padding: 0.4rem 0.8rem; border-radius: 8px; font-size: 0.85rem;'>
+                👑 IA Suprême
+            </span>
+            <span style='background: rgba(45,158,86,0.2); padding: 0.4rem 0.8rem; border-radius: 8px; font-size: 0.85rem;'>
+                📊 Historique complet
+            </span>
+            <span style='background: rgba(45,158,86,0.2); padding: 0.4rem 0.8rem; border-radius: 8px; font-size: 0.85rem;'>
+                💰 Value Bets détaillés
+            </span>
+        </div>
+        <p style='text-align: center; margin-top: 1rem;'>
+            <strong style='color: #4ade80;'>⭐ À partir de 500 FCFA/semaine</strong>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # PANEL ADMIN
@@ -406,11 +674,12 @@ def afficher_interface_connexion():
         st.markdown("""
             <div style='text-align:center; padding:1rem;'>
                 <p>Accédez à l'app sans créer de compte.<br>
-                <small style='color:#888;'>Vos données ne seront pas sauvegardées en cloud.</small></p>
+                <small style='color:#888;'>Vous avez <strong>3 jours d'essai gratuit</strong>.<br>
+                Inscrivez-vous ensuite pour continuer.</small></p>
             </div>
         """, unsafe_allow_html=True)
 
-        if st.button("👤 Continuer sans compte", use_container_width=True):
+        if st.button("👤 Essayer 3 jours gratuitement", use_container_width=True):
             with st.spinner("Connexion anonyme..."):
                 result = connexion_anonyme()
                 if connecter_utilisateur(result, "Visiteur"):
@@ -434,7 +703,7 @@ def afficher_interface_connexion():
     return False
 
 # ─────────────────────────────────────────────
-# BARRE UTILISATEUR (affichée en haut de l'app)
+# BARRE UTILISATEUR
 # ─────────────────────────────────────────────
 
 def afficher_barre_utilisateur():
@@ -457,24 +726,40 @@ def afficher_barre_utilisateur():
         elif plan == "premium":
             st.markdown(f"**⭐ {nom}**")
             st.markdown("*Compte Premium*")
+        elif is_anonyme():
+            temps = get_temps_restant_invite_str()
+            st.markdown(f"**👤 Visiteur**")
+            if temps == "Expiré":
+                st.error(f"⏰ Mode invité expiré")
+            else:
+                st.warning(f"⏰ Mode invité : encore **{temps}**")
         else:
             st.markdown(f"**👤 {nom}**")
             if MODE_PAYANT:
                 st.markdown("*Compte Gratuit*")
-                st.caption(f"Prédictions aujourd'hui : {user.get('predictions_aujourd_hui', 0)}/{LIMITE_PREDICTIONS_GRATUITES}")
+                restantes = get_predictions_restantes()
+                limite = get_limite_du_jour()
+                utilisees = limite - restantes
+                st.caption(f"🎯 Prédictions : {utilisees}/{limite} utilisées")
+
+                # Barre de progression
+                if limite > 0:
+                    pct = min(1.0, utilisees / limite)
+                    couleur = "#2d9e56" if pct < 0.5 else "#f59e0b" if pct < 1.0 else "#e74c3c"
+                    st.markdown(f"""
+                    <div style='background: rgba(255,255,255,0.1); border-radius: 5px; height: 6px; margin: 4px 0;'>
+                        <div style='background: {couleur}; border-radius: 5px; height: 6px; width: {pct*100}%;'></div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         if st.button("🚪 Se déconnecter", use_container_width=True):
             deconnexion()
 
         st.markdown("---")
 
-
-
-
-
-# ==============================
-# 🔑 MOT DE PASSE OUBLIÉ
-# ==============================
+# ─────────────────────────────────────────────
+# MOT DE PASSE OUBLIÉ
+# ─────────────────────────────────────────────
 
 def afficher_reset_password():
     import streamlit as st
@@ -514,5 +799,3 @@ def afficher_reset_password():
 
     else:
         st.info("📱 Connectez-vous via OTP depuis l'écran principal")
-
-
