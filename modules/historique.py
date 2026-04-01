@@ -1,5 +1,5 @@
 # ============================================================
-# MODULE HISTORIQUE — avec Firebase
+# MODULE HISTORIQUE — avec Firebase + Cloisonnement par utilisateur
 # ============================================================
 import streamlit as st
 import pandas as pd
@@ -126,9 +126,14 @@ def get_firebase_db():
     return result[0]
 
 # ============================================================
-# CHARGEMENT HISTORIQUE (Firebase + local)
+# CHARGEMENT HISTORIQUE (Firebase + local) — avec filtrage par user_id
 # ============================================================
-def charger_historique():
+def charger_historique(user_id=None):
+    """
+    Charge l'historique des prédictions.
+    - Si user_id est fourni : ne retourne que les prédictions de cet utilisateur
+    - Si user_id est None : retourne TOUT (mode admin)
+    """
     historique_firebase = []
     historique_local    = []
 
@@ -171,35 +176,73 @@ def charger_historique():
                         db.collection('predictions').add(h)
                 except:
                     pass
-        return sorted(
+        historique = sorted(
             historique_firebase,
             key=lambda x: x.get('date', ''),
             reverse=True
         )
+    elif historique_local:
+        historique = historique_local
+        # Si Firebase vide mais local non vide -> synchroniser
+        if db:
+            try:
+                for h in historique_local:
+                    db.collection('predictions').add(h)
+            except:
+                pass
+    else:
+        historique = []
 
-    # Si Firebase vide mais local non vide -> synchroniser
-    if historique_local and db:
-        try:
-            for h in historique_local:
-                db.collection('predictions').add(h)
-        except:
-            pass
+    # ── FILTRAGE PAR USER_ID ──
+    # Si un user_id est fourni, ne garder que les prédictions de cet utilisateur
+    if user_id:
+        historique = [h for h in historique if h.get('user_id') == user_id]
 
-    return historique_local
+    return historique
 
 # ============================================================
-# SAUVEGARDE HISTORIQUE (Firebase + local)
+# SAUVEGARDE PREDICTION (Firebase + local) — avec user_id automatique
 # ============================================================
 def sauvegarder_prediction(prediction):
-    # Sauvegarde Firebase
+    """
+    Sauvegarde une prédiction dans Firebase et en local.
+    Ajoute automatiquement le user_id de l'utilisateur connecté.
+    Convertit les types numpy pour compatibilité Firebase/JSON.
+    """
+    import numpy as np
+
+    # ── Ajouter automatiquement le user_id si absent ──
+    if 'user_id' not in prediction:
+        user = st.session_state.get("user", {})
+        prediction['user_id'] = user.get('uid', 'anonymous')
+        prediction['user_email'] = user.get('email', '')
+
+    # ── Convertir les types numpy pour Firebase/JSON ──
+    prediction_clean = {}
+    for k, v in prediction.items():
+        try:
+            if isinstance(v, (np.integer,)):
+                prediction_clean[k] = int(v)
+            elif isinstance(v, (np.floating,)):
+                prediction_clean[k] = float(v)
+            elif isinstance(v, np.ndarray):
+                prediction_clean[k] = v.tolist()
+            elif isinstance(v, (np.bool_,)):
+                prediction_clean[k] = bool(v)
+            else:
+                prediction_clean[k] = v
+        except:
+            prediction_clean[k] = str(v)
+
+    # ── Sauvegarde Firebase ──
     db = get_firebase_db()
     if db:
         try:
-            db.collection('predictions').add(prediction)
+            db.collection('predictions').add(prediction_clean)
         except:
             pass
 
-    # Sauvegarde locale en backup
+    # ── Sauvegarde locale en backup ──
     historique = []
     if os.path.exists(FICHIER_HISTORIQUE):
         try:
@@ -207,7 +250,7 @@ def sauvegarder_prediction(prediction):
                 historique = json.load(f)
         except:
             historique = []
-    historique.append(prediction)
+    historique.append(prediction_clean)
     with open(FICHIER_HISTORIQUE, 'w', encoding='utf-8') as f:
         json.dump(historique, f, ensure_ascii=False, indent=2)
 
@@ -238,7 +281,7 @@ def sauvegarder_historique(historique):
             pass
 
 # ============================================================
-# PAGE HISTORIQUE
+# PAGE HISTORIQUE — avec cloisonnement par utilisateur
 # ============================================================
 def page_historique():
     st.title("📚 Historique des prédictions")
@@ -251,7 +294,18 @@ def page_historique():
     else:
         st.warning("💾 Mode local — Firebase non connecté")
 
-    historique = charger_historique()
+    # ── Cloisonnement par utilisateur ──
+    user = st.session_state.get("user", {})
+    user_id = user.get('uid', '')
+    user_email = user.get('email', 'Utilisateur')
+
+    from modules.auth import is_admin
+    if is_admin():
+        historique = charger_historique()  # Admin voit TOUT
+        st.info(f"🛡️ Mode Admin — Affichage de TOUTES les prédictions ({len(historique)} total)")
+    else:
+        historique = charger_historique(user_id=user_id)  # User voit seulement les siennes
+        st.caption(f"📌 Tes prédictions personnelles — {user_email}")
 
     if not historique:
         st.info(

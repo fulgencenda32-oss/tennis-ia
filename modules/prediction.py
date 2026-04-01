@@ -375,14 +375,10 @@ def predire_match(
     consensus_score = max(p_gen, p_clay, p_hard, p_grass) - min(p_gen, p_clay, p_hard, p_grass)
 
     # ── IA SUPRÊME ─────────────────────────────────────────────
-    # Charge le méta-modèle calibré depuis le PKL
-    # Construit dynamiquement les meta-features selon ce qui a été entraîné
-    # ───────────────────────────────────────────────────────────
     meta_model    = modeles.get('meta_model')
     meta_features = modeles.get('meta_features')
 
     if meta_model is not None and meta_features is not None:
-        # Proba du spécialiste selon la surface du match
         _surf_proba_map = {
             'Clay': p_clay, 'Clay (Indoor)': p_clay,
             'Hard': p_hard, 'Hard (Indoor)': p_hard,
@@ -391,8 +387,6 @@ def predire_match(
         p_spec = _surf_proba_map.get(surface, p_hard)
         _probas = [p_gen, p_clay, p_hard, p_grass]
 
-        # Dictionnaire de TOUTES les meta-features possibles
-        # Le code sélectionne automatiquement celles utilisées à l'entraînement
         _all_meta = {
             'proba_generale':         p_gen,
             'proba_clay':             p_clay,
@@ -424,7 +418,6 @@ def predire_match(
         proba_a        = float(meta_model.predict_proba(X_meta)[0][1])
         modele_utilise = f"👑 IA Suprême · {surf_key}"
     else:
-        # Fallback : IA spécialisée ou générale
         modele_actif   = modele_surf_spec if modele_surf_spec is not None else modele_win
         proba_a        = float(modele_actif.predict_proba(X)[0][1])
         modele_utilise = f"Spécialisé {surf_key}" if modele_surf_spec is not None else "Général"
@@ -549,7 +542,7 @@ def predire_match(
         p_gen, p_clay, p_hard, p_grass, surf_key
     )
 
-    # ── Précision du modèle surface (poids dynamique) ──
+    # ── Précision du modèle surface ──
     acc_surf_info = modeles.get('acc_surf', {})
     acc_surface_active = acc_surf_info.get(surf_key, None)
 
@@ -703,15 +696,10 @@ def _generer_explication(
     surface, round_match, proba_v,
     p_gen, p_clay, p_hard, p_grass, surf_key
 ):
-    """
-    Génère une explication textuelle de la prédiction.
-    Analyse chaque facteur et retourne une liste de raisons ordonnées par impact.
-    """
     is_a = (vainqueur == joueur_a)
     v = vainqueur
     o = joueur_b if is_a else joueur_a
 
-    # Valeurs du vainqueur / de l'adversaire
     elo_v      = elo_a if is_a else elo_b
     elo_o      = elo_b if is_a else elo_a
     elo_sv     = elo_a_surf if is_a else elo_b_surf
@@ -731,7 +719,6 @@ def _generer_explication(
 
     raisons = []
 
-    # 1. ELO général
     diff_elo = elo_v - elo_o
     if diff_elo > 200:
         raisons.append((30, f"⚡ ELO nettement supérieur ({round(elo_v)} vs {round(elo_o)}, +{round(diff_elo)} pts)"))
@@ -742,14 +729,12 @@ def _generer_explication(
     elif diff_elo < -100:
         raisons.append((5, f"⚠️ ELO inférieur ({round(elo_v)} vs {round(elo_o)}) — d'autres facteurs compensent"))
 
-    # 2. ELO surface
     diff_elo_s = elo_sv - elo_so
     if diff_elo_s > 150:
         raisons.append((25, f"🎾 Spécialiste {surface} (ELO surface {round(elo_sv)} vs {round(elo_so)})"))
     elif diff_elo_s > 80:
         raisons.append((15, f"🎾 Bon sur {surface} (ELO surface +{round(diff_elo_s)})"))
 
-    # 3. Forme récente
     diff_forme = (forme_v - forme_o)
     if diff_forme > 0.25:
         raisons.append((22, f"📈 Forme récente excellente ({round(forme_v*100)}% vs {round(forme_o*100)}%)"))
@@ -758,7 +743,6 @@ def _generer_explication(
     elif diff_forme < -0.15:
         raisons.append((5, f"⚠️ Forme inférieure — compensée par d'autres facteurs"))
 
-    # 4. Classement
     try:
         rv, ro = int(rank_v), int(rank_o)
         if rv < ro and (ro - rv) > 50:
@@ -768,7 +752,6 @@ def _generer_explication(
     except:
         pass
 
-    # 5. H2H
     if total_h2h >= 3:
         if h2h_v > h2h_o:
             raisons.append((18, f"🤝 Domine les confrontations ({h2h_v}-{h2h_o})"))
@@ -777,7 +760,6 @@ def _generer_explication(
     elif total_h2h > 0:
         raisons.append((3, f"🤝 H2H limité ({h2h_v}-{h2h_o}, {total_h2h} match(s))"))
 
-    # 6. Streak
     if streak_v >= 7:
         raisons.append((20, f"🔥 Série exceptionnelle de {int(streak_v)} victoires"))
     elif streak_v >= 4:
@@ -785,13 +767,11 @@ def _generer_explication(
     elif streak_v >= 2:
         raisons.append((5, f"🔥 En bonne dynamique ({int(streak_v)} victoires)"))
 
-    # 7. Domicile
     if dom_v == 2:
         raisons.append((10, "🏠 Avantage du domicile (joue dans son pays)"))
     elif dom_v == 1:
         raisons.append((5, "🌍 Joue en pays voisin (léger avantage public)"))
 
-    # 8. Clutch / Big match (en phases finales)
     rnd = str(round_match).upper()
     if 'FINAL' in rnd or rnd in ['F', 'SF', 'QF']:
         if clutch_v > 0.65:
@@ -799,13 +779,11 @@ def _generer_explication(
         if bigmatch_v > 0.65:
             raisons.append((10, f"🏆 Performant en grands matchs ({round(bigmatch_v*100)}%)"))
 
-    # 9. Historique tournoi
     if hist_t_v > 0.7:
         raisons.append((8, f"📅 Très bon historique sur ce tournoi ({round(hist_t_v*100)}%)"))
     elif hist_t_v > 0.55:
         raisons.append((4, f"📅 Bon historique sur ce tournoi ({round(hist_t_v*100)}%)"))
 
-    # 10. Consensus IA
     probas = [p_gen, p_clay, p_hard, p_grass]
     ecart = max(probas) - min(probas)
     if ecart < 0.05:
@@ -815,10 +793,8 @@ def _generer_explication(
     elif ecart > 0.25:
         raisons.append((0, "⚠️ Désaccord entre les IA — prédiction moins sûre"))
 
-    # Trier par impact décroissant et ne garder que les textes
     raisons.sort(key=lambda x: x[0], reverse=True)
 
-    # Si aucune raison forte
     if not raisons or raisons[0][0] < 10:
         raisons.insert(0, (0, "🔄 Combinaison de multiples facteurs légèrement favorables"))
 
@@ -1398,31 +1374,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             elif utiliser_cotes:
                 st.info("❌ Pas de value bet detecte — les cotes sont bien calibrees par rapport a la prediction IA.")
 
-            sauvegarder_prediction(res)
+            # ── Sauvegarde avec user_id dans Firebase ──
+            from modules.historique import sauvegarder_prediction as sauv_firebase
+            sauv_firebase(res)
             st.caption(f"✅ Prédiction sauvegardée — {res['date']}")
-
-# ============================================================
-# SAUVEGARDE HISTORIQUE
-# ============================================================
-def sauvegarder_prediction(res):
-    fichier = os.path.join(os.path.dirname(__file__), '..', 'data', 'historique.json')
-    historique = []
-    if os.path.exists(fichier):
-        try:
-            with open(fichier, 'r', encoding='utf-8') as f:
-                historique = json.load(f)
-        except:
-            historique = []
-
-    res_json = {}
-    for k, v in res.items():
-        try:
-            if isinstance(v, (np.integer,)): res_json[k] = int(v)
-            elif isinstance(v, (np.floating,)): res_json[k] = float(v)
-            else: res_json[k] = v
-        except:
-            res_json[k] = str(v)
-
-    historique.append(res_json)
-    with open(fichier, 'w', encoding='utf-8') as f:
-        json.dump(historique, f, ensure_ascii=False, indent=2)
