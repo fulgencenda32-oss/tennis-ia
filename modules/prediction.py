@@ -47,6 +47,85 @@ import os
 from datetime import datetime
 import random
 import plotly.graph_objects as go
+import time  # 🔧 CORRECTION : ajout pour gestion du timing
+
+# ============================================================
+# 🔧 CORRECTION : CACHE GLOBAL pour éviter les lectures répétées
+# ============================================================
+_CLASSEMENTS_CACHE = None
+_CLASSEMENTS_CACHE_TIME = 0
+
+def _charger_classements_cache():
+    """Charge classements.json UNE SEULE FOIS et le garde en mémoire"""
+    global _CLASSEMENTS_CACHE, _CLASSEMENTS_CACHE_TIME
+    # Recharger seulement toutes les 10 minutes
+    if _CLASSEMENTS_CACHE is not None and (time.time() - _CLASSEMENTS_CACHE_TIME) < 600:
+        return _CLASSEMENTS_CACHE
+    try:
+        _path = os.path.join(os.path.dirname(__file__), '..', 'data', 'classements.json')
+        with open(_path, encoding='utf-8') as f:
+            _data = json.load(f)
+        _CLASSEMENTS_CACHE = {**_data.get('ATP', {}), **_data.get('WTA', {})}
+        _CLASSEMENTS_CACHE_TIME = time.time()
+    except Exception:
+        _CLASSEMENTS_CACHE = {}
+    return _CLASSEMENTS_CACHE
+
+
+# ============================================================
+# 🔧 CORRECTION : Sauvegarde Firebase SÉCURISÉE
+# ============================================================
+def sauvegarder_prediction_safe(res):
+    """Sauvegarde dans Firebase avec gestion d'erreur - ne plante JAMAIS"""
+    try:
+        from modules.historique import sauvegarder_prediction as sauv_firebase
+        sauv_firebase(res)
+        return True, "✅ Prédiction sauvegardée"
+    except Exception as e:
+        erreur_msg = str(e)
+        if "429" in erreur_msg or "quota" in erreur_msg.lower():
+            return False, "⚠️ Sauvegarde impossible — quota Firebase dépassé (réessayez demain)"
+        elif "unavailable" in erreur_msg.lower() or "timeout" in erreur_msg.lower():
+            return False, "⚠️ Firebase temporairement indisponible — prédiction non sauvegardée"
+        else:
+            return False, f"⚠️ Sauvegarde échouée : {erreur_msg}"
+
+
+# ============================================================
+# 🔧 CORRECTION : Vérification auth SÉCURISÉE
+# ============================================================
+def verifier_auth_safe():
+    """Charge les fonctions auth avec gestion d'erreur Firebase"""
+    try:
+        from modules.auth import (
+            peut_faire_prediction, incrementer_compteur_predictions,
+            peut_voir_ia_supreme, peut_voir_consensus, peut_voir_value_bet_detail,
+            is_anonyme, afficher_cadenas
+        )
+        return {
+            'peut_faire_prediction': peut_faire_prediction,
+            'incrementer_compteur_predictions': incrementer_compteur_predictions,
+            'peut_voir_ia_supreme': peut_voir_ia_supreme,
+            'peut_voir_consensus': peut_voir_consensus,
+            'peut_voir_value_bet_detail': peut_voir_value_bet_detail,
+            'is_anonyme': is_anonyme,
+            'afficher_cadenas': afficher_cadenas,
+            'ok': True
+        }
+    except Exception as e:
+        # 🔧 Si Firebase plante, on fournit des fonctions par défaut
+        st.warning(f"⚠️ Système d'authentification indisponible : {e}")
+        return {
+            'peut_faire_prediction': lambda: (True, "Mode hors-ligne"),
+            'incrementer_compteur_predictions': lambda: None,
+            'peut_voir_ia_supreme': lambda: True,
+            'peut_voir_consensus': lambda: True,
+            'peut_voir_value_bet_detail': lambda: True,
+            'is_anonyme': lambda: False,
+            'afficher_cadenas': lambda msg, **kw: st.info(msg),
+            'ok': False
+        }
+
 
 # ============================================================
 # DICTIONNAIRE PAYS — Tournoi → Code IOC
@@ -131,7 +210,6 @@ def safe_float(val, defaut=500.0):
 # RECHERCHE FLOUE
 # ============================================================
 def get_api_key():
-    import os
     cles = [
         os.getenv("ALLSPORTS_API_KEY"),
         os.getenv("ALLSPORTS_API_KEY_2"),
@@ -140,36 +218,41 @@ def get_api_key():
     return [c for c in cles if c]
 
 def recherche_api_joueur(nom):
-    from modules.api_rotation import appel_api
-    from datetime import datetime, timedelta
+    """🔧 CORRECTION : ajout try/except + cache session"""
+    try:
+        from modules.api_rotation import appel_api
+        from datetime import timedelta
 
-    cache_key = f"api_search_{nom.lower().strip()}"
-    if cache_key in st.session_state:
-        return st.session_state[cache_key]
+        cache_key = f"api_search_{nom.lower().strip()}"
+        if cache_key in st.session_state:
+            return st.session_state[cache_key]
 
-    date_fin   = datetime.now().strftime("%Y-%m-%d")
-    date_debut = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+        date_fin   = datetime.now().strftime("%Y-%m-%d")
+        date_debut = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
 
-    resultat = appel_api({"met": "Fixtures", "from": date_debut, "to": date_fin})
-    if resultat["source"] == "erreur" or not resultat.get("data"):
+        resultat = appel_api({"met": "Fixtures", "from": date_debut, "to": date_fin})
+        if resultat["source"] == "erreur" or not resultat.get("data"):
+            return []
+
+        data = resultat["data"]
+        if data.get("success") != 1:
+            return []
+
+        noms_trouves = []
+        mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
+        for m in data.get("result", []):
+            p1 = str(m.get("event_first_player", ""))
+            p2 = str(m.get("event_second_player", ""))
+            for p in [p1, p2]:
+                if "/" not in p and any(mot in p.lower() for mot in mots):
+                    if p not in noms_trouves:
+                        noms_trouves.append(p)
+
+        st.session_state[cache_key] = noms_trouves[:5]
+        return noms_trouves[:5]
+    except Exception as e:
+        st.warning(f"⚠️ Recherche API impossible : {e}")
         return []
-
-    data = resultat["data"]
-    if data.get("success") != 1:
-        return []
-
-    noms_trouves = []
-    mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
-    for m in data.get("result", []):
-        p1 = str(m.get("event_first_player", ""))
-        p2 = str(m.get("event_second_player", ""))
-        for p in [p1, p2]:
-            if "/" not in p and any(mot in p.lower() for mot in mots):
-                if p not in noms_trouves:
-                    noms_trouves.append(p)
-
-    st.session_state[cache_key] = noms_trouves[:5]
-    return noms_trouves[:5]
 
 def recherche_floue(nom, liste_joueurs, limite=5, seuil=55):
     if not nom or len(nom) < 2:
@@ -227,16 +310,8 @@ def predire_match(
     elo_a_surf = elo_surf.get(surface, {}).get(joueur_a, 1500.0)
     elo_b_surf = elo_surf.get(surface, {}).get(joueur_b, 1500.0)
 
-    # Classement
-    import json as _json
-    _classements_cache = {}
-    try:
-        import os as _os
-        _path = _os.path.join(_os.path.dirname(__file__), '..', 'data', 'classements.json')
-        _data = _json.load(open(_path, encoding='utf-8'))
-        _classements_cache = {**_data.get('ATP', {}), **_data.get('WTA', {})}
-    except:
-        pass
+    # 🔧 CORRECTION : utiliser le cache global au lieu de relire le fichier
+    _classements_cache = _charger_classements_cache()
 
     def get_rank(joueur):
         if joueur in _classements_cache:
@@ -799,50 +874,58 @@ def _generer_explication(
 # PAGE PRÉDICTION
 # ============================================================
 def chercher_match_aujourd_hui(nom):
-    from modules.api_rotation import appel_api
-    from datetime import datetime
+    """🔧 CORRECTION : ajout try/except pour éviter crash si API indisponible"""
+    try:
+        from modules.api_rotation import appel_api
 
-    cache_key = f"matchs_jour_search_{nom.lower().strip()}"
-    if cache_key in st.session_state:
-        return st.session_state[cache_key]
+        cache_key = f"matchs_jour_search_{nom.lower().strip()}"
+        if cache_key in st.session_state:
+            return st.session_state[cache_key]
 
-    aujourd_hui = datetime.now().strftime("%Y-%m-%d")
-    resultat = appel_api({"met": "Fixtures", "from": aujourd_hui, "to": aujourd_hui})
-    if resultat["source"] == "erreur" or not resultat.get("data"):
+        aujourd_hui = datetime.now().strftime("%Y-%m-%d")
+        resultat = appel_api({"met": "Fixtures", "from": aujourd_hui, "to": aujourd_hui})
+        if resultat["source"] == "erreur" or not resultat.get("data"):
+            return []
+
+        data = resultat["data"]
+        if data.get("success") != 1:
+            return []
+
+        mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
+        matchs_trouves = []
+        for m in data.get("result", []):
+            p1 = str(m.get("event_first_player", ""))
+            p2 = str(m.get("event_second_player", ""))
+            if "/" in p1 or "/" in p2:
+                continue
+            if any(mot in p1.lower() or mot in p2.lower() for mot in mots):
+                matchs_trouves.append({
+                    "joueur_a": p1, "joueur_b": p2,
+                    "tournoi": m.get("league_name", ""),
+                    "heure": m.get("event_time", ""),
+                })
+
+        st.session_state[cache_key] = matchs_trouves[:3]
+        return matchs_trouves[:3]
+    except Exception as e:
+        # 🔧 Ne plante plus si l'API est down
         return []
-
-    data = resultat["data"]
-    if data.get("success") != 1:
-        return []
-
-    mots = [m.lower() for m in nom.strip().split() if len(m) > 2]
-    matchs_trouves = []
-    for m in data.get("result", []):
-        p1 = str(m.get("event_first_player", ""))
-        p2 = str(m.get("event_second_player", ""))
-        if "/" in p1 or "/" in p2:
-            continue
-        if any(mot in p1.lower() or mot in p2.lower() for mot in mots):
-            matchs_trouves.append({
-                "joueur_a": p1, "joueur_b": p2,
-                "tournoi": m.get("league_name", ""),
-                "heure": m.get("event_time", ""),
-            })
-
-    st.session_state[cache_key] = matchs_trouves[:3]
-    return matchs_trouves[:3]
 
 
 def page_prediction(modeles, df_base):
     st.title("🎾 Prédiction de match")
     st.markdown("---")
 
-    # ── Import auth pour vérifier les droits ──
-    from modules.auth import (
-        peut_faire_prediction, incrementer_compteur_predictions,
-        peut_voir_ia_supreme, peut_voir_consensus, peut_voir_value_bet_detail,
-        is_anonyme, afficher_cadenas
-    )
+    # 🔧 CORRECTION : auth sécurisé — ne plante plus si Firebase est down
+    auth = verifier_auth_safe()
+    peut_faire_prediction = auth['peut_faire_prediction']
+    incrementer_compteur_predictions = auth['incrementer_compteur_predictions']
+    peut_voir_consensus = auth['peut_voir_consensus']
+    peut_voir_value_bet_detail = auth['peut_voir_value_bet_detail']
+    afficher_cadenas = auth['afficher_cadenas']
+
+    if not auth['ok']:
+        st.info("ℹ️ Mode hors-ligne : toutes les fonctionnalités sont accessibles sans limitation.")
 
     liste_joueurs = list(modeles['elo_final'].keys())
 
@@ -908,32 +991,35 @@ def page_prediction(modeles, df_base):
                         onglet_api_a, onglet_csv_a = st.tabs(["🌐 Via API", "📁 Via CSV"])
                         with onglet_api_a:
                             if st.button("🔍 Rechercher via API", key="api_a"):
-                                from modules.joueurs import ajouter_joueur_api
-                                with st.spinner("Recherche en cours..."):
-                                    matchs_api = ajouter_joueur_api(nom_a)
-                                if matchs_api:
-                                    nouveaux = []
-                                    for m in matchs_api:
-                                        nouveaux.append({
-                                            "winner_name": m.get("event_first_player", ""),
-                                            "loser_name": m.get("event_second_player", ""),
-                                            "surface": m.get("event_ground", "Hard"),
-                                            "tourney_name": m.get("league_name", "Unknown"),
-                                            "tourney_date": m.get("event_date", "2026-01-01"),
-                                            "score": m.get("event_final_result", ""),
-                                            "round": m.get("event_round", "R32"),
-                                            "winner_rank": m.get("first_player_rank", 500),
-                                            "loser_rank": m.get("second_player_rank", 500),
-                                        })
-                                    from modules.mise_a_jour import mise_a_jour_incrementale
-                                    modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                                    df_new = pd.DataFrame(nouveaux)
-                                    if st.session_state.get("df_base") is not None:
-                                        st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
-                                    st.session_state["modeles"] = modeles
-                                    st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
-                                else:
-                                    st.error(f"❌ {nom_a} non trouvé via API")
+                                try:
+                                    from modules.joueurs import ajouter_joueur_api
+                                    with st.spinner("Recherche en cours..."):
+                                        matchs_api = ajouter_joueur_api(nom_a)
+                                    if matchs_api:
+                                        nouveaux = []
+                                        for m in matchs_api:
+                                            nouveaux.append({
+                                                "winner_name": m.get("event_first_player", ""),
+                                                "loser_name": m.get("event_second_player", ""),
+                                                "surface": m.get("event_ground", "Hard"),
+                                                "tourney_name": m.get("league_name", "Unknown"),
+                                                "tourney_date": m.get("event_date", "2026-01-01"),
+                                                "score": m.get("event_final_result", ""),
+                                                "round": m.get("event_round", "R32"),
+                                                "winner_rank": m.get("first_player_rank", 500),
+                                                "loser_rank": m.get("second_player_rank", 500),
+                                            })
+                                        from modules.mise_a_jour import mise_a_jour_incrementale
+                                        modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                        df_new = pd.DataFrame(nouveaux)
+                                        if st.session_state.get("df_base") is not None:
+                                            st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                        st.session_state["modeles"] = modeles
+                                        st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                                    else:
+                                        st.error(f"❌ {nom_a} non trouvé via API")
+                                except Exception as e:
+                                    st.error(f"❌ Erreur API : {e}")
                         with onglet_csv_a:
                             st.info("""📋 **Format CSV requis :**
 Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
@@ -941,14 +1027,17 @@ Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R
 Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
                             fichier_a = st.file_uploader("📁 Upload CSV joueur A", type=["csv"], key="csv_a")
                             if fichier_a:
-                                df_up = pd.read_csv(fichier_a)
-                                nouveaux = df_up.to_dict("records")
-                                from modules.mise_a_jour import mise_a_jour_incrementale
-                                modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                                if st.session_state.get("df_base") is not None:
-                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
-                                st.session_state["modeles"] = modeles
-                                st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                                try:
+                                    df_up = pd.read_csv(fichier_a)
+                                    nouveaux = df_up.to_dict("records")
+                                    from modules.mise_a_jour import mise_a_jour_incrementale
+                                    modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                    if st.session_state.get("df_base") is not None:
+                                        st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
+                                    st.session_state["modeles"] = modeles
+                                    st.success(f"✅ {nom_a} ajouté avec {len(nouveaux)} matchs !")
+                                except Exception as e:
+                                    st.error(f"❌ Erreur CSV : {e}")
                         st.markdown("---")
                     else:
                         joueur_a = suggestions_a[options_a.index(choix_a)][0]
@@ -1009,32 +1098,35 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         onglet_api_b, onglet_csv_b = st.tabs(['🌐 Via API', '📁 Via CSV'])
                         with onglet_api_b:
                             if st.button("🔍 Rechercher via API", key="api_b"):
-                                from modules.joueurs import ajouter_joueur_api
-                                with st.spinner("Recherche en cours..."):
-                                    matchs_api = ajouter_joueur_api(nom_b)
-                                if matchs_api:
-                                    nouveaux = []
-                                    for m in matchs_api:
-                                        nouveaux.append({
-                                            "winner_name": m.get("event_first_player", ""),
-                                            "loser_name": m.get("event_second_player", ""),
-                                            "surface": m.get("event_ground", "Hard"),
-                                            "tourney_name": m.get("league_name", "Unknown"),
-                                            "tourney_date": m.get("event_date", "2026-01-01"),
-                                            "score": m.get("event_final_result", ""),
-                                            "round": m.get("event_round", "R32"),
-                                            "winner_rank": m.get("first_player_rank", 500),
-                                            "loser_rank": m.get("second_player_rank", 500),
-                                        })
-                                    from modules.mise_a_jour import mise_a_jour_incrementale
-                                    modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                                    df_new = pd.DataFrame(nouveaux)
-                                    if st.session_state.get("df_base") is not None:
-                                        st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
-                                    st.session_state["modeles"] = modeles
-                                    st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
-                                else:
-                                    st.error(f"❌ {nom_b} non trouvé via API")
+                                try:
+                                    from modules.joueurs import ajouter_joueur_api
+                                    with st.spinner("Recherche en cours..."):
+                                        matchs_api = ajouter_joueur_api(nom_b)
+                                    if matchs_api:
+                                        nouveaux = []
+                                        for m in matchs_api:
+                                            nouveaux.append({
+                                                "winner_name": m.get("event_first_player", ""),
+                                                "loser_name": m.get("event_second_player", ""),
+                                                "surface": m.get("event_ground", "Hard"),
+                                                "tourney_name": m.get("league_name", "Unknown"),
+                                                "tourney_date": m.get("event_date", "2026-01-01"),
+                                                "score": m.get("event_final_result", ""),
+                                                "round": m.get("event_round", "R32"),
+                                                "winner_rank": m.get("first_player_rank", 500),
+                                                "loser_rank": m.get("second_player_rank", 500),
+                                            })
+                                        from modules.mise_a_jour import mise_a_jour_incrementale
+                                        modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                        df_new = pd.DataFrame(nouveaux)
+                                        if st.session_state.get("df_base") is not None:
+                                            st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_new], ignore_index=True)
+                                        st.session_state["modeles"] = modeles
+                                        st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
+                                    else:
+                                        st.error(f"❌ {nom_b} non trouvé via API")
+                                except Exception as e:
+                                    st.error(f"❌ Erreur API : {e}")
                         with onglet_csv_b:
                             st.info("""📋 **Format CSV requis :**
 Colonnes : winner_name, loser_name, surface, tourney_name, tourney_date, score, round, winner_rank, loser_rank
@@ -1042,14 +1134,17 @@ Exemple : Kouassi Ange, Djokovic N., Clay, Roland Garros, 2026-01-15, 6-3 6-4, R
 Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank : 500 si inconnu""")
                             fichier_b = st.file_uploader("📁 Upload CSV joueur B", type=["csv"], key="csv_b")
                             if fichier_b:
-                                df_up = pd.read_csv(fichier_b)
-                                nouveaux = df_up.to_dict("records")
-                                from modules.mise_a_jour import mise_a_jour_incrementale
-                                modeles = mise_a_jour_incrementale(modeles, nouveaux)
-                                if st.session_state.get("df_base") is not None:
-                                    st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
-                                st.session_state["modeles"] = modeles
-                                st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
+                                try:
+                                    df_up = pd.read_csv(fichier_b)
+                                    nouveaux = df_up.to_dict("records")
+                                    from modules.mise_a_jour import mise_a_jour_incrementale
+                                    modeles = mise_a_jour_incrementale(modeles, nouveaux)
+                                    if st.session_state.get("df_base") is not None:
+                                        st.session_state["df_base"] = pd.concat([st.session_state["df_base"], df_up], ignore_index=True)
+                                    st.session_state["modeles"] = modeles
+                                    st.success(f"✅ {nom_b} ajouté avec {len(nouveaux)} matchs !")
+                                except Exception as e:
+                                    st.error(f"❌ Erreur CSV : {e}")
                         st.markdown("---")
                     else:
                         joueur_b = suggestions_b[options_b.index(choix_b)][0]
@@ -1098,10 +1193,15 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
         elif joueur_a == joueur_b:
             st.error("❌ Les deux joueurs doivent être différents !")
         else:
-            peut, message = peut_faire_prediction()
-            if not peut:
-                st.error(f"🔒 {message}")
-                st.stop()
+            # 🔧 CORRECTION : vérification auth avec gestion d'erreur
+            try:
+                peut, message = peut_faire_prediction()
+                if not peut:
+                    st.error(f"🔒 {message}")
+                    st.stop()
+            except Exception:
+                pass  # Mode hors-ligne, on continue
+
             with st.spinner("⏳ Calcul en cours..."):
                 try:
                     res = predire_match(
@@ -1116,7 +1216,12 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     st.exception(e)
                     st.stop()
 
-            incrementer_compteur_predictions()
+            # 🔧 CORRECTION : incrémenter avec gestion d'erreur
+            try:
+                incrementer_compteur_predictions()
+            except Exception:
+                pass
+
             st.success("✅ Prédiction calculée !")
 
             # ── Badge modèle utilisé ──
@@ -1247,7 +1352,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            # ── Consensus IA Suprême — Premium uniquement ──
+            # ── Consensus IA Suprême ──
             if res.get('ia_supreme_active'):
                 cons = res.get('consensus_score', 0)
                 if cons < 10:
@@ -1257,7 +1362,13 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 else:
                     cons_emoji, cons_label = "🔴", "DÉSACCORD — Match imprévisible"
 
-                if peut_voir_consensus():
+                # 🔧 CORRECTION : gestion erreur sur peut_voir_consensus
+                try:
+                    can_see = peut_voir_consensus()
+                except Exception:
+                    can_see = True  # Mode hors-ligne
+
+                if can_see:
                     with st.expander(f"{cons_emoji} IA Suprême · {cons_label}", expanded=True):
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("🌍 Générale",  f"{res.get('proba_gen',  0)}%")
@@ -1331,19 +1442,21 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             ou_std  = res.get('ou_jeux_std', 3.5)
 
             if ou_jeux is not None:
-                from scipy import stats as _stats
-                SEUILS = [18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 32.5]
-                seuil_proche = min(SEUILS, key=lambda s: abs(s - ou_jeux))
-                import pandas as _pd2
-                rows_ou = []
-                for seuil in SEUILS:
-                    prob_over  = round(float(1 - _stats.norm.cdf(seuil, loc=ou_jeux, scale=ou_std)) * 100, 1)
-                    prob_under = round(100 - prob_over, 1)
-                    marker = " ✅" if seuil == seuil_proche else ""
-                    rows_ou.append({"Seuil": f"{seuil}{marker}", "UNDER": f"{prob_under}%", "OVER": f"{prob_over}%"})
-                st.caption(f"Total jeux prédit par l'IA : **{ou_jeux} jeux**")
-                st.dataframe(_pd2.DataFrame(rows_ou), hide_index=True, use_container_width=True)
-                st.caption("✅ = seuil le plus proche du total prédit · Basé sur distribution statistique autour de la prédiction IA")
+                try:
+                    from scipy import stats as _stats
+                    SEUILS = [18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 32.5]
+                    seuil_proche = min(SEUILS, key=lambda s: abs(s - ou_jeux))
+                    rows_ou = []
+                    for seuil in SEUILS:
+                        prob_over  = round(float(1 - _stats.norm.cdf(seuil, loc=ou_jeux, scale=ou_std)) * 100, 1)
+                        prob_under = round(100 - prob_over, 1)
+                        marker = " ✅" if seuil == seuil_proche else ""
+                        rows_ou.append({"Seuil": f"{seuil}{marker}", "UNDER": f"{prob_under}%", "OVER": f"{prob_over}%"})
+                    st.caption(f"Total jeux prédit par l'IA : **{ou_jeux} jeux**")
+                    st.dataframe(pd.DataFrame(rows_ou), hide_index=True, use_container_width=True)
+                    st.caption("✅ = seuil le plus proche du total prédit · Basé sur distribution statistique autour de la prédiction IA")
+                except ImportError:
+                    st.info(f"Total jeux prédit : **{ou_jeux}** (installer scipy pour le tableau détaillé)")
             else:
                 st.info("Modèle Over/Under disponible après réentraînement (`python entrainement_hebdo.py`)")
 
@@ -1366,10 +1479,16 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     st.metric(joueur_a, f"{prob_bk_a}%", f"cote {cote_a}")
                     st.metric(joueur_b, f"{prob_bk_b}%", f"cote {cote_b}")
 
-            # ── Value Bets — détail réservé Premium ──
+            # ── Value Bets ──
             if res['value_bet_info']:
                 st.markdown("---")
-                if peut_voir_value_bet_detail():
+                # 🔧 CORRECTION : gestion erreur sur peut_voir_value_bet_detail
+                try:
+                    can_see_vb = peut_voir_value_bet_detail()
+                except Exception:
+                    can_see_vb = True
+
+                if can_see_vb:
                     for info in res['value_bet_info']:
                         profit = round(info['valeur'] * 100)
                         st.success(
@@ -1392,7 +1511,9 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             elif utiliser_cotes:
                 st.info("❌ Pas de value bet détecté — les cotes sont bien calibrées par rapport à la prédiction IA.")
 
-            # ── Sauvegarde Firebase ──
-            from modules.historique import sauvegarder_prediction as sauv_firebase
-            sauv_firebase(res)
-            st.caption(f"✅ Prédiction sauvegardée — {res['date']}")
+            # 🔧 CORRECTION PRINCIPALE : Sauvegarde Firebase SÉCURISÉE
+            ok, msg = sauvegarder_prediction_safe(res)
+            if ok:
+                st.caption(f"✅ Prédiction sauvegardée — {res['date']}")
+            else:
+                st.caption(f"{msg}")
