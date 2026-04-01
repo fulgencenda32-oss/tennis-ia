@@ -213,6 +213,14 @@ if not afficher_interface_connexion():
 afficher_barre_utilisateur()
 
 # ============================================================
+# ONBOARDING — 3 écrans pour nouveaux utilisateurs
+# ============================================================
+from modules.onboarding import afficher_onboarding
+
+if afficher_onboarding():
+    st.stop()
+
+# ============================================================
 # REDÉFINITION simplifier_round
 # ============================================================
 def simplifier_round(r):
