@@ -1,11 +1,11 @@
 # ============================================================
-# MODULE HISTORIQUE — avec Firebase + Cloisonnement par utilisateur
+# MODULE HISTORIQUE — Firebase + Cloisonnement + Suppression douce + Archive 30j
 # ============================================================
 import streamlit as st
 import pandas as pd
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 FICHIER_HISTORIQUE = os.path.join(
     os.path.dirname(__file__), '..', 'data', 'historique.json'
@@ -128,11 +128,13 @@ def get_firebase_db():
 # ============================================================
 # CHARGEMENT HISTORIQUE (Firebase + local) — avec filtrage par user_id
 # ============================================================
-def charger_historique(user_id=None):
+def charger_historique(user_id=None, inclure_supprimes=False):
     """
     Charge l'historique des prédictions.
     - Si user_id est fourni : ne retourne que les prédictions de cet utilisateur
     - Si user_id est None : retourne TOUT (mode admin)
+    - Si inclure_supprimes est False : masque les prédictions marquées deleted
+    - Si inclure_supprimes est True : retourne tout (mode admin archive)
     """
     historique_firebase = []
     historique_local    = []
@@ -194,9 +196,12 @@ def charger_historique(user_id=None):
         historique = []
 
     # ── FILTRAGE PAR USER_ID ──
-    # Si un user_id est fourni, ne garder que les prédictions de cet utilisateur
     if user_id:
         historique = [h for h in historique if h.get('user_id') == user_id]
+
+    # ── FILTRAGE DES SUPPRIMÉS ──
+    if not inclure_supprimes:
+        historique = [h for h in historique if not h.get('deleted', False)]
 
     return historique
 
@@ -264,7 +269,7 @@ def sauvegarder_historique(historique):
     if db:
         try:
             for h in historique:
-                if h.get('resultat_reel'):
+                if h.get('resultat_reel') or h.get('deleted'):
                     docs = db.collection('predictions').where(
                         'joueur_a', '==', h.get('joueur_a')
                     ).where(
@@ -273,15 +278,35 @@ def sauvegarder_historique(historique):
                         'date', '==', h.get('date')
                     ).stream()
                     for doc in docs:
-                        doc.reference.update({
-                            'resultat_reel': h.get('resultat_reel'),
-                            'score_reel': h.get('score_reel', '')
-                        })
+                        update_data = {}
+                        if h.get('resultat_reel'):
+                            update_data['resultat_reel'] = h.get('resultat_reel')
+                            update_data['score_reel'] = h.get('score_reel', '')
+                        if h.get('deleted'):
+                            update_data['deleted'] = True
+                            update_data['deleted_at'] = h.get('deleted_at', '')
+                        if update_data:
+                            doc.reference.update(update_data)
         except:
             pass
 
 # ============================================================
-# PAGE HISTORIQUE — avec cloisonnement par utilisateur
+# SUPPRESSION DOUCE D'UNE PRÉDICTION
+# ============================================================
+def supprimer_prediction(historique, index):
+    """
+    Marque une prédiction comme supprimée (soft delete).
+    La prédiction reste dans la base pour l'admin mais disparaît pour l'utilisateur.
+    """
+    if 0 <= index < len(historique):
+        historique[index]['deleted'] = True
+        historique[index]['deleted_at'] = datetime.now().isoformat()
+        sauvegarder_historique(historique)
+        return True
+    return False
+
+# ============================================================
+# PAGE HISTORIQUE — avec cloisonnement + suppression douce + filtre 30j
 # ============================================================
 def page_historique():
     st.title("📚 Historique des prédictions")
@@ -298,14 +323,60 @@ def page_historique():
     user = st.session_state.get("user", {})
     user_id = user.get('uid', '')
     user_email = user.get('email', 'Utilisateur')
+    user_plan = user.get('plan', 'gratuit')
 
-    from modules.auth import is_admin
-    if is_admin():
-        historique = charger_historique()  # Admin voit TOUT
-        st.info(f"🛡️ Mode Admin — Affichage de TOUTES les prédictions ({len(historique)} total)")
+    from modules.auth import is_admin, is_premium
+    est_admin = is_admin()
+    est_premium = is_premium()
+
+    if est_admin:
+        # ── MODE ADMIN : voir tout, y compris supprimés ──
+        historique_complet = charger_historique(inclure_supprimes=True)  # TOUT
+        historique = charger_historique(inclure_supprimes=False)  # Sans supprimés (vue par défaut)
+
+        nb_supprimes = len([h for h in historique_complet if h.get('deleted', False)])
+
+        st.info(f"🛡️ Mode Admin — {len(historique_complet)} prédictions totales ({nb_supprimes} supprimées par les utilisateurs)")
+
+        # Toggle pour voir les supprimés
+        voir_supprimes = st.checkbox("🗑️ Afficher aussi les prédictions supprimées par les utilisateurs", value=False)
+        if voir_supprimes:
+            historique = historique_complet
+
     else:
-        historique = charger_historique(user_id=user_id)  # User voit seulement les siennes
-        st.caption(f"📌 Tes prédictions personnelles — {user_email}")
+        # ── MODE UTILISATEUR : voir seulement les siennes, non supprimées ──
+        historique_toutes = charger_historique(user_id=user_id, inclure_supprimes=False)
+
+        # ── Filtre 30 jours pour les gratuits ──
+        date_limite = datetime.now() - timedelta(days=30)
+
+        if est_premium:
+            # Premium voit tout (ses données non supprimées)
+            historique = historique_toutes
+            st.caption(f"⭐ Compte Premium — {user_email} — Historique complet")
+        else:
+            # Gratuit voit seulement les 30 derniers jours
+            historique = []
+            masquees = 0
+            for h in historique_toutes:
+                try:
+                    date_pred = datetime.strptime(str(h.get('date', ''))[:10], '%Y-%m-%d')
+                    if date_pred >= date_limite:
+                        historique.append(h)
+                    else:
+                        masquees += 1
+                except:
+                    # Si la date n'est pas parseable, on l'inclut par défaut
+                    historique.append(h)
+
+            st.caption(f"📌 Tes prédictions personnelles — {user_email} — 30 derniers jours")
+
+            if masquees > 0:
+                st.warning(
+                    f"🔒 **{masquees} prédiction(s) masquée(s)** — "
+                    f"Ton historique gratuit est limité aux 30 derniers jours.\n\n"
+                    f"⭐ **Passe en Premium** pour voir tout ton historique depuis le début !"
+                )
 
     if not historique:
         st.info(
@@ -359,10 +430,9 @@ def page_historique():
 
     st.markdown("---")
 
-    # ── Tableau historique ──
+    # ── Tableau historique avec bouton supprimer ──
     st.subheader("📋 Toutes les prédictions")
 
-    rows = []
     for i, h in enumerate(historique):
         res_reel  = h.get('resultat_reel', '')
         vainqueur = h.get('vainqueur', '')
@@ -371,28 +441,49 @@ def page_historique():
         else:
             correct = "⏳"
 
-        rows.append({
-            'ID'             : i + 1,
-            'Date'           : h.get('date', 'N/A'),
-            'Joueur A'       : h.get('joueur_a', 'N/A'),
-            'Joueur B'       : h.get('joueur_b', 'N/A'),
-            'Surface'        : h.get('surface', 'N/A'),
-            'Tournoi'        : h.get('tournoi', 'N/A'),
-            'Round'          : h.get('best_of', 'N/A'),
-            'IA prédit'      : vainqueur,
-            'Probabilité'    : f"{h.get('proba_v', 0)}%",
-            'Score prédit'   : h.get('score_exact', 'N/A'),
-            'Sets prédits'   : h.get('nb_sets', 'N/A'),
-            'Handicap'       : h.get('handicap', 'N/A'),
-            'Résultat réel'  : res_reel if res_reel else '⏳ En attente',
-            'Score réel'     : h.get('score_reel', '-'),
-            'Correct ?'      : correct,
-        })
+        est_supprime = h.get('deleted', False)
 
-    df_hist = pd.DataFrame(rows)
-    st.dataframe(df_hist, hide_index=True, use_container_width=True)
+        # ── Ligne de prédiction ──
+        with st.container():
+            col_info, col_res, col_action = st.columns([5, 3, 1])
 
-    st.markdown("---")
+            with col_info:
+                # Badge supprimé (visible seulement pour admin)
+                prefix = "🗑️ " if est_supprime else ""
+                st.markdown(
+                    f"**{prefix}{i+1}. {h.get('joueur_a', '?')} vs {h.get('joueur_b', '?')}**  \n"
+                    f"📅 {h.get('date', 'N/A')} · 🎾 {h.get('surface', '?')} · 🏆 {h.get('tournoi', '?')}"
+                )
+
+            with col_res:
+                st.markdown(
+                    f"🤖 **{vainqueur}** ({h.get('proba_v', 0)}%)  \n"
+                    f"Résultat : {res_reel if res_reel else '⏳ En attente'} {correct}"
+                )
+
+            with col_action:
+                # Bouton supprimer (pas pour admin, et pas si déjà supprimé)
+                if not est_admin and not est_supprime:
+                    if st.button("🗑️", key=f"del_{i}_{h.get('date','')}", help="Supprimer cette prédiction"):
+                        # On doit retrouver cette prédiction dans l'historique COMPLET (non filtré)
+                        historique_complet_user = charger_historique(user_id=user_id, inclure_supprimes=False)
+                        # Trouver l'index dans l'historique complet
+                        for j, hc in enumerate(historique_complet_user):
+                            if (hc.get('date') == h.get('date') and
+                                hc.get('joueur_a') == h.get('joueur_a') and
+                                hc.get('joueur_b') == h.get('joueur_b')):
+                                historique_complet_user[j]['deleted'] = True
+                                historique_complet_user[j]['deleted_at'] = datetime.now().isoformat()
+                                break
+                        sauvegarder_historique(historique_complet_user)
+                        st.success("✅ Prédiction supprimée de ton historique")
+                        st.rerun()
+
+                # Admin : badge supprimé
+                if est_admin and est_supprime:
+                    st.caption(f"🗑️ Supprimé le {h.get('deleted_at', '?')[:10]}")
+
+            st.markdown("---")
 
     # ── Saisir résultat réel ──
     st.subheader("✏️ Saisir le résultat réel")
@@ -461,7 +552,37 @@ def page_historique():
     # ── Export ──
     st.markdown("---")
     st.subheader("📥 Exporter l'historique")
-    csv = df_hist.to_csv(index=False)
+
+    # Construire le DataFrame pour l'export
+    rows_export = []
+    for i, h in enumerate(historique):
+        res_reel  = h.get('resultat_reel', '')
+        vainqueur = h.get('vainqueur', '')
+        if res_reel and vainqueur:
+            correct = "OUI" if res_reel.lower().split()[-1] == vainqueur.lower().split()[-1] else "NON"
+        else:
+            correct = "EN ATTENTE"
+
+        rows_export.append({
+            'ID'             : i + 1,
+            'Date'           : h.get('date', 'N/A'),
+            'Joueur A'       : h.get('joueur_a', 'N/A'),
+            'Joueur B'       : h.get('joueur_b', 'N/A'),
+            'Surface'        : h.get('surface', 'N/A'),
+            'Tournoi'        : h.get('tournoi', 'N/A'),
+            'Round'          : h.get('best_of', 'N/A'),
+            'IA prédit'      : vainqueur,
+            'Probabilité'    : f"{h.get('proba_v', 0)}%",
+            'Score prédit'   : h.get('score_exact', 'N/A'),
+            'Sets prédits'   : h.get('nb_sets', 'N/A'),
+            'Handicap'       : h.get('handicap', 'N/A'),
+            'Résultat réel'  : res_reel if res_reel else 'En attente',
+            'Score réel'     : h.get('score_reel', '-'),
+            'Correct ?'      : correct,
+        })
+
+    df_export = pd.DataFrame(rows_export)
+    csv = df_export.to_csv(index=False)
     st.download_button(
         label     = "⬇️ Télécharger CSV",
         data      = csv,
