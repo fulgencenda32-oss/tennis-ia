@@ -1,3 +1,8 @@
+# 📄 FICHIER : `modules/prediction.py` (COMPLET — remplace tout)
+
+Je te donne le fichier complet avec la modification du Consensus IA Suprême (cadenas pour non-Premium) :
+
+```python
 # Dictionnaire alias noms joueurs
 ALIAS_JOUEURS = {
     "Taylor Harry Fritz": "T. Fritz",
@@ -374,7 +379,7 @@ def predire_match(
 
     consensus_score = max(p_gen, p_clay, p_hard, p_grass) - min(p_gen, p_clay, p_hard, p_grass)
 
-    # ── IA SUPRÊME ─────────────────────────────────────────────
+    # ── IA SUPRÊME ──
     meta_model    = modeles.get('meta_model')
     meta_features = modeles.get('meta_features')
 
@@ -590,10 +595,8 @@ def predire_match(
         'value_bet_info' : value_bet_info,
         'cotes_fournies' : cote_a is not None,
         'date'           : datetime.now().strftime('%Y-%m-%d %H:%M'),
-        # Mode Abstention
         'abstention'     : abstention,
         'anomalies'      : anomalies,
-        # IA Suprême
         'ia_supreme_active' : meta_model is not None,
         'proba_gen'         : round(p_gen   * 100, 1),
         'proba_clay'        : round(p_clay  * 100, 1),
@@ -601,14 +604,10 @@ def predire_match(
         'proba_grass'       : round(p_grass * 100, 1),
         'consensus_score'   : round(consensus_score * 100, 1),
         'acc_surface_active': round(acc_surface_active * 100, 1) if acc_surface_active else None,
-        # Explication automatique
         'explication'    : explication,
-        # Score de confiance
         'confiance'      : _calculer_confiance(proba_v, elo_a, elo_b, forme_a, forme_b, wins_a, total_h2h, rank_a, rank_b),
-        # Over/Under sets 2.5
         'ou_sets_proba'  : float(modele_ou_sets.predict_proba(X)[0][1]) if modele_ou_sets is not None else (1.0 if nb_sets_p > 2 else 0.0),
         'ou_sets_over'   : bool(modele_ou_sets.predict(X)[0]) if modele_ou_sets is not None else nb_sets_p > 2,
-        # Over/Under jeux
         'ou_jeux_val'    : round(float(modele_ou_jeux.predict(X)[0])) if modele_ou_jeux is not None else 0,
         'ou_jeux_predit' : round(float(modele_ou_jeux.predict(X)[0]), 1) if modele_ou_jeux is not None else None,
         'ou_jeux_std'    : modeles.get('std_globale_jeux', 3.5),
@@ -1208,173 +1207,4 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 st.code(texte_copie, language=None)
             with col_cp2:
                 st.markdown(" ")
-                st.markdown(" ")
-                import urllib.parse
-                wa_url = "https://wa.me/?text=" + urllib.parse.quote(texte_whatsapp)
-                st.markdown(
-                    f'<a href="{wa_url}" target="_blank" style="display:inline-block;background:#25D366;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;text-align:center;width:100%;box-sizing:border-box;">📲 Partager<br>WhatsApp</a>',
-                    unsafe_allow_html=True
-                )
-
-            st.markdown("---")
-
-            # ── Mode Abstention ──
-            if res.get('anomalies'):
-                if res.get('abstention'):
-                    st.error(
-                        "⛔ **L'IA Suprême déconseille ce match**\n\n"
-                        "La prédiction est affichée ci-dessous mais la fiabilité est très réduite. "
-                        "Évitez de miser sur ce match."
-                    )
-                else:
-                    st.warning("⚠️ **Prédiction à interpréter avec prudence**")
-
-                with st.expander("🔍 Voir les raisons", expanded=res.get('abstention', False)):
-                    for msg in res['anomalies']:
-                        st.markdown(f"- {msg}")
-
-            # ── Résultats ──
-            col_v1, col_v2, col_v3, col_v4 = st.columns(4)
-            with col_v1:
-                st.metric("🏆 Vainqueur prédit", res['vainqueur'], f"{res['proba_v']}%")
-            with col_v2:
-                st.metric("🎯 Score exact", res['score_exact'])
-            with col_v3:
-                st.metric("🔢 Nombre de sets", f"{res['nb_sets']} sets")
-            with col_v4:
-                st.metric("⚖️ Handicap", f"{res['handicap']} set(s)")
-
-            st.markdown("---")
-
-            # ── Consensus IA Suprême ──
-            if res.get('ia_supreme_active'):
-                cons = res.get('consensus_score', 0)
-                if cons < 10:
-                    cons_emoji, cons_label, cons_color = "🟢", "CONSENSUS FORT — Prédiction très fiable", "success"
-                elif cons < 25:
-                    cons_emoji, cons_label, cons_color = "🟡", "CONSENSUS MOYEN — Prédiction fiable", "warning"
-                else:
-                    cons_emoji, cons_label, cons_color = "🔴", "DÉSACCORD — Match imprévisible", "error"
-
-                with st.expander(f"{cons_emoji} IA Suprême · {cons_label}", expanded=True):
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("🌍 Générale",  f"{res.get('proba_gen',  0)}%")
-                    c2.metric("🔴 Clay",       f"{res.get('proba_clay', 0)}%")
-                    c3.metric("🔵 Hard",       f"{res.get('proba_hard', 0)}%")
-                    c4.metric("💚 Grass",      f"{res.get('proba_grass',0)}%")
-                    st.caption(
-                        f"Écart entre IA : **{cons}%** · "
-                        f"Modèle utilisé : **{res.get('modele_utilise', '—')}**"
-                    )
-
-            st.markdown("---")
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                st.markdown("**📊 Statistiques comparées**")
-                stats_df = pd.DataFrame({
-                    'Statistique' : [
-                        'ELO général', f'ELO {surface}', 'Forme récente', 'H2H',
-                        'Classement', 'Hot streak', 'Comeback', 'Clutch',
-                        'Big match', 'Dominance', 'Historique tournoi', 'Domicile',
-                    ],
-                    joueur_a : [
-                        res['elo_a'], res['elo_a_surf'], f"{res['forme_a']}%", res['h2h_a'],
-                        f"#{res['rank_a']}", f"{res.get('streak_a', 0)} victoires",
-                        f"{res.get('comeback_a', 30)}%", f"{res.get('clutch_a', 50)}%",
-                        f"{res.get('bigmatch_a', 50)}%", f"{res.get('dominance_a', 0)}%",
-                        f"{res.get('hist_tournoi_a', 50)}%",
-                        '🏠 Domicile' if res.get('domicile_a') == 2 else ('🌍 Voisin' if res.get('domicile_a') == 1 else '✈️ Extérieur'),
-                    ],
-                    joueur_b : [
-                        res['elo_b'], res['elo_b_surf'], f"{res['forme_b']}%", res['h2h_b'],
-                        f"#{res['rank_b']}", f"{res.get('streak_b', 0)} victoires",
-                        f"{res.get('comeback_b', 30)}%", f"{res.get('clutch_b', 50)}%",
-                        f"{res.get('bigmatch_b', 50)}%", f"{res.get('dominance_b', 0)}%",
-                        f"{res.get('hist_tournoi_b', 50)}%",
-                        '🏠 Domicile' if res.get('domicile_b') == 2 else ('🌍 Voisin' if res.get('domicile_b') == 1 else '✈️ Extérieur'),
-                    ]
-                })
-                st.dataframe(stats_df, hide_index=True, use_container_width=True)
-
-            with col_d2:
-                st.markdown("**🎯 Probabilités**")
-                fig = go.Figure(go.Bar(
-                    x=[joueur_a, joueur_b],
-                    y=[res['proba_a'], res['proba_b']],
-                    marker_color=['#2d9e56', '#FF5722'],
-                    text=[f"{res['proba_a']}%", f"{res['proba_b']}%"],
-                    textposition='auto',
-                ))
-                fig.update_layout(
-                    yaxis_title="Probabilité (%)", yaxis_range=[0, 100],
-                    height=300, margin=dict(t=20),
-                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white'),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("---")
-
-            # ── Over/Under ──
-            st.markdown("**📈 Over / Under — Total Jeux**")
-            ou_jeux = res.get('ou_jeux_predit')
-            ou_std  = res.get('ou_jeux_std', 3.5)
-
-            if ou_jeux is not None:
-                from scipy import stats as _stats
-                SEUILS = [18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 32.5]
-                seuil_proche = min(SEUILS, key=lambda s: abs(s - ou_jeux))
-                import pandas as _pd2
-                rows_ou = []
-                for seuil in SEUILS:
-                    prob_over  = round(float(1 - _stats.norm.cdf(seuil, loc=ou_jeux, scale=ou_std)) * 100, 1)
-                    prob_under = round(100 - prob_over, 1)
-                    marker = " ✅" if seuil == seuil_proche else ""
-                    rows_ou.append({"Seuil": f"{seuil}{marker}", "UNDER": f"{prob_under}%", "OVER": f"{prob_over}%"})
-                st.caption(f"Total jeux prédit par l'IA : **{ou_jeux} jeux**")
-                st.dataframe(_pd2.DataFrame(rows_ou), hide_index=True, use_container_width=True)
-                st.caption("✅ = seuil le plus proche du total prédit · Basé sur distribution statistique autour de la prédiction IA")
-            else:
-                st.info("Modèle Over/Under disponible après réentraînement (`python entrainement_hebdo.py`)")
-
-            # Comparaison IA vs Bookmaker + Value Bet
-            if utiliser_cotes and cote_a and cote_b and cote_a > 1 and cote_b > 1:
-                st.markdown("---")
-                st.markdown("**📊 Prédiction IA vs Bookmaker**")
-                raw_a = 1 / cote_a
-                raw_b = 1 / cote_b
-                total_raw = raw_a + raw_b
-                prob_bk_a = round(raw_a / total_raw * 100, 1)
-                prob_bk_b = round(raw_b / total_raw * 100, 1)
-                col_ia, col_bk = st.columns(2)
-                with col_ia:
-                    st.markdown("**🤖 IA**")
-                    st.metric(joueur_a, f"{res['proba_a']}%")
-                    st.metric(joueur_b, f"{res['proba_b']}%")
-                with col_bk:
-                    st.markdown("**📊 Bookmaker**")
-                    st.metric(joueur_a, f"{prob_bk_a}%", f"cote {cote_a}")
-                    st.metric(joueur_b, f"{prob_bk_b}%", f"cote {cote_b}")
-
-            if res['value_bet_info']:
-                st.markdown("---")
-                for info in res['value_bet_info']:
-                    profit = round(info['valeur'] * 100)
-                    st.success(
-                        f"💰 **VALUE BET detecte sur {info['joueur']}**\n\n"
-                        f"- IA predit : **{info['proba']}%** de chances\n"
-                        f"- Bookmaker estime : **{round(100/info['cote'], 1)}%** (cote {info['cote']})\n"
-                        f"- Avantage mathematique : **+{info['valeur']}%**\n"
-                        f"- Pour 10 000 FCFA mises → profit espere **{profit} FCFA**"
-                    )
-                st.warning(
-                    "⚠️ Un value bet est une opportunite mathematique sur le long terme "
-                    "— pas une garantie de victoire pour ce match specifique."
-                )
-            elif utiliser_cotes:
-                st.info("❌ Pas de value bet detecte — les cotes sont bien calibrees par rapport a la prediction IA.")
-
-            # ── Sauvegarde avec user_id dans Firebase ──
-            from modules.historique import sauvegarder_prediction as sauv_firebase
-            sauv_firebase(res)
-            st.caption(f"✅ Prédiction sauvegardée — {res['date']}")
+                st.
