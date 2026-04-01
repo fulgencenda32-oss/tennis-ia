@@ -110,6 +110,8 @@ def is_premium():
 
 def connexion_email(email, mot_de_passe):
     """Connexion avec email et mot de passe."""
+    if not FIREBASE_API_KEY:
+        return {"success": False, "erreur": "Clé Firebase manquante — contactez l'administrateur"}
     url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
     payload = {
         "email": email,
