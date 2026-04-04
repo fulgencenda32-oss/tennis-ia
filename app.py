@@ -397,7 +397,7 @@ try:
 except Exception:
     pass
 
-st.markdown("---")
+st.success("✅ Nouvelle base chargée - Version 04/04/2026")
 
 # ============================================================
 # ONGLETS NAVIGATION
