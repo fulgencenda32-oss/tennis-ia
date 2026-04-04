@@ -250,8 +250,13 @@ def simplifier_round(r):
 @st.cache_resource
 def charger_modeles():
     chemin = os.path.join(
-        os.path.dirname(__file__), 'data', 'modeles_tennis_v2.pkl'
+        os.path.dirname(__file__), 'data', 'models', 'modeles_tennis_v2.pkl'
     )
+    if not os.path.exists(chemin):
+        # Fallback ancien emplacement
+        chemin = os.path.join(
+            os.path.dirname(__file__), 'data', 'modeles_tennis_v2.pkl'
+        )
     if not os.path.exists(chemin):
         try:
             from huggingface_hub import hf_hub_download
@@ -274,14 +279,43 @@ def charger_base():
     # winner_name/loser_name : filtrage matchs
     # winner_rank/loser_rank : récupération classement
     COLS = ['winner_name', 'loser_name', 'winner_rank', 'loser_rank']
+
+    # Nouveau fichier nettoyé (priorité)
     chemin = os.path.join(
-        os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
+        os.path.dirname(__file__), 'data', 'cleaned', 'matchs_clean.csv'
     )
     if os.path.exists(chemin):
         try:
             return pd.read_csv(chemin, usecols=COLS, low_memory=False)
         except Exception:
             return pd.read_csv(chemin, low_memory=False)
+
+    # Fallback ancien fichier local
+    chemin_old = os.path.join(
+        os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
+    )
+    if os.path.exists(chemin_old):
+        try:
+            return pd.read_csv(chemin_old, usecols=COLS, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin_old, low_memory=False)
+
+    # Fallback HuggingFace — nouveau fichier
+    try:
+        from huggingface_hub import hf_hub_download
+        chemin_hf = hf_hub_download(
+            repo_id   = 'fulgence10/tennis-data',
+            filename  = 'matchs_clean.csv',
+            repo_type = 'dataset'
+        )
+        try:
+            return pd.read_csv(chemin_hf, usecols=COLS, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin_hf, low_memory=False)
+    except Exception:
+        pass
+
+    # Fallback HuggingFace — ancien fichier
     try:
         from huggingface_hub import hf_hub_download
         chemin_hf = hf_hub_download(
@@ -315,7 +349,7 @@ with st.spinner("⏳ Chargement de Tennis IA..."):
 st.markdown("""
 <div class="main-header">
     <h1>🎾 Tennis IA</h1>
-    <p>Intelligence Artificielle de Prédictions Tennis · ATP · WTA · Challengers · ITF · 830 000+ matchs</p>
+    <p>Intelligence Artificielle de Prédictions Tennis · ATP · WTA · Challengers · ITF · 755 917 matchs</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -329,10 +363,10 @@ with col3:
 with col4:
     st.metric("⚖️ Handicap", f"{modeles.get('acc_handi',0)*100:.1f}%")
 with col5:
-    st.metric("📊 Matchs analysés", "830 906")
+    st.metric("📊 Matchs analysés", "755 917")
 
 if not CSV_DISPO:
-    st.warning("⚠️ BASE_FEATURES.csv non disponible – certaines fonctionnalités sont limitées.")
+    st.warning("⚠️ Base de données non disponible – certaines fonctionnalités sont limitées.")
 
 
 # ============================================================
