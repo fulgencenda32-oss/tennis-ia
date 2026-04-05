@@ -9,6 +9,7 @@ from rapidfuzz import process, fuzz
 import requests
 import os
 from dotenv import load_dotenv
+import config as cfg  # ✅ AJOUT
 
 load_dotenv()
 API_KEY  = os.getenv("ALLSPORTS_API_KEY")
@@ -71,9 +72,23 @@ def get_rank_api(nom):
     return None
 
 # ============================================================
+# EXTRACTION SÉCURISÉE D'UNE VALEUR DEPUIS UNE SERIES PANDAS
+# ============================================================
+def safe_get(series, key, default=None):
+    """Extrait une valeur d'une Series pandas de manière sécurisée"""
+    try:
+        if key in series.index:
+            val = series[key]
+            if pd.notna(val):
+                return val
+        return default
+    except:
+        return default
+
+# ============================================================
 # PROFIL JOUEUR
 # ============================================================
-def get_profil_joueur(nom, modeles, df_base):
+def get_profil_joueur(nom, modeles, df_base, df_joueurs=None):
     elo_final = modeles['elo_final']
     elo_surf  = modeles['elo_final_surf']
     forme     = modeles['forme_final']
@@ -82,6 +97,24 @@ def get_profil_joueur(nom, modeles, df_base):
     elo_hard    = elo_surf.get('Hard',  {}).get(nom, 1500)
     elo_clay    = elo_surf.get('Clay',  {}).get(nom, 1500)
     elo_grass   = elo_surf.get('Grass', {}).get(nom, 1500)
+
+    # ✅ NOUVEAU : Chercher infos détaillées dans joueurs.csv
+    taille = None
+    main = None
+    date_naissance = None
+    age_actuel = None
+    player_id = None
+    
+    if df_joueurs is not None and 'nom_complet' in df_joueurs.columns:
+        # Recherche par nom_complet
+        joueur_info = df_joueurs[df_joueurs['nom_complet'] == nom]
+        if not joueur_info.empty:
+            j = joueur_info.iloc[0]
+            taille = safe_get(j, 'taille_cm')
+            main = safe_get(j, 'main')
+            date_naissance = safe_get(j, 'date_naissance')
+            age_actuel = safe_get(j, 'age_actuel')
+            player_id = safe_get(j, 'player_id')
 
     if df_base is not None:
         mask = (
@@ -97,6 +130,7 @@ def get_profil_joueur(nom, modeles, df_base):
         ).reset_index(drop=True)
     else:
         matchs = pd.DataFrame()
+        mask = None  # ✅ Définir mask même si df_base est None
 
     total_matchs = len(matchs)
     if total_matchs > 0 and 'winner_name' in matchs.columns:
@@ -135,6 +169,14 @@ def get_profil_joueur(nom, modeles, df_base):
             if p and p not in ['nan','None','NaN','']:
                 pays = p
                 break
+    
+    # ✅ NOUVEAU : Si pays toujours N/A, chercher dans joueurs.csv
+    if pays == 'N/A' and df_joueurs is not None and 'nom_complet' in df_joueurs.columns:
+        joueur_info = df_joueurs[df_joueurs['nom_complet'] == nom]
+        if not joueur_info.empty:
+            pays_csv = safe_get(joueur_info.iloc[0], 'nationalite')
+            if pays_csv:
+                pays = str(pays_csv)
 
     # 5 derniers matchs
     derniers = []
@@ -155,7 +197,7 @@ def get_profil_joueur(nom, modeles, df_base):
 
     # % victoires par surface
     def forme_surf(surf):
-        if df_base is None or matchs.empty:
+        if df_base is None or matchs.empty or mask is None:
             return 0
         m_s = df_base[mask & (df_base['surface'] == surf)]
         if len(m_s) == 0: return 0
@@ -179,6 +221,12 @@ def get_profil_joueur(nom, modeles, df_base):
         'clay_pct'    : forme_surf('Clay'),
         'grass_pct'   : forme_surf('Grass'),
         'derniers'    : derniers,
+        # ✅ NOUVELLES INFOS
+        'taille'      : taille,
+        'main'        : main,
+        'date_naissance': date_naissance,
+        'age_actuel'  : age_actuel,
+        'player_id'   : player_id,
     }
 
 # ============================================================
@@ -308,6 +356,15 @@ def page_joueurs(modeles, df_base):
     st.title("👤 Profil Joueur")
     st.markdown("---")
 
+    # ✅ NOUVEAU : Charger le fichier joueurs.csv
+    df_joueurs = None
+    try:
+        df_joueurs = pd.read_csv(cfg.FICHIER_JOUEURS)
+    except FileNotFoundError:
+        pass  # Silencieux si le fichier n'existe pas
+    except Exception as e:
+        st.warning(f"⚠️ Impossible de charger joueurs.csv : {e}")
+
     liste_joueurs = list(modeles['elo_final'].keys())
 
     col1, col2 = st.columns([3, 1])
@@ -413,7 +470,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             with st.spinner("⏳ Chargement du profil..."):
                 profil = get_profil_joueur(
-                    joueur_sel, modeles, df_base
+                    joueur_sel, modeles, df_base, df_joueurs
                 )
 
             st.markdown("---")
@@ -422,12 +479,45 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             col_p1, col_p2, col_p3, col_p4 = st.columns(4)
             with col_p1:
                 st.metric("👤 Joueur", profil['nom'])
+                # ✅ NOUVEAU : Afficher l'ID si disponible
+                if profil.get('player_id'):
+                    st.caption(f"🆔 ID: {profil['player_id']}")
             with col_p2:
                 st.metric("🏅 Classement", f"#{profil['rank']}")
             with col_p3:
                 st.metric("🌍 Pays", profil['pays'])
             with col_p4:
                 st.metric("📈 Forme", f"{profil['forme']}%")
+            
+            # ✅ NOUVEAU : Section infos physiques
+            st.markdown("---")
+            st.subheader("📋 Informations détaillées")
+            col_phys1, col_phys2, col_phys3, col_phys4 = st.columns(4)
+            
+            with col_phys1:
+                if profil.get('taille') and pd.notna(profil['taille']):
+                    st.metric("📏 Taille", f"{int(profil['taille'])} cm")
+                else:
+                    st.metric("📏 Taille", "N/A")
+            
+            with col_phys2:
+                if profil.get('main') and pd.notna(profil['main']):
+                    main_texte = "Droitier" if profil['main'] == 'R' else "Gaucher" if profil['main'] == 'L' else profil['main']
+                    st.metric("✋ Main", main_texte)
+                else:
+                    st.metric("✋ Main", "N/A")
+            
+            with col_phys3:
+                if profil.get('age_actuel') and pd.notna(profil['age_actuel']):
+                    st.metric("🎂 Âge", f"{int(profil['age_actuel'])} ans")
+                else:
+                    st.metric("🎂 Âge", "N/A")
+            
+            with col_phys4:
+                if profil.get('date_naissance') and pd.notna(profil['date_naissance']):
+                    st.metric("📅 Naissance", str(profil['date_naissance'])[:10])
+                else:
+                    st.metric("📅 Naissance", "N/A")
 
             # Barre progression forme
             st.markdown("**Forme récente (10 derniers matchs)**")
@@ -448,7 +538,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 st.metric("🌿 Grass",   profil['elo_grass'])
 
             # Graphique ELO par surface
-            import plotly.graph_objects as go
             fig_elo = go.Figure(go.Bar(
                 x=['Général','Hard','Clay','Grass'],
                 y=[
