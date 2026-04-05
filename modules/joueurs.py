@@ -386,12 +386,23 @@ def page_joueurs(modeles, df_base):
     st.title("👤 Profil Joueur")
     st.markdown("---")
 
-    # ── Chargement de joueurs.csv ──
+    # ── Chargement de joueurs.csv (local ou HuggingFace) ──
     df_joueurs = None
     try:
-        df_joueurs = pd.read_csv(cfg.FICHIER_JOUEURS)
-    except FileNotFoundError:
-        pass  # joueurs.csv optionnel — pas bloquant
+        chemin_joueurs = cfg.FICHIER_JOUEURS
+        if os.path.exists(chemin_joueurs):
+            df_joueurs = pd.read_csv(chemin_joueurs)
+        else:
+            try:
+                from huggingface_hub import hf_hub_download
+                chemin_hf = hf_hub_download(
+                    repo_id   = 'fulgence10/tennis-data',
+                    filename  = 'joueurs.csv',
+                    repo_type = 'dataset'
+                )
+                df_joueurs = pd.read_csv(chemin_hf)
+            except Exception:
+                pass
     except Exception as e:
         st.warning(f"⚠️ Impossible de charger joueurs.csv : {e}")
 
