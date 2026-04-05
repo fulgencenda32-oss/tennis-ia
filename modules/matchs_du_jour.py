@@ -56,22 +56,16 @@ def est_hors_ligne():
         return True
 
 # ============================================================
-# RECUPERATION MATCHS
+# RECUPERATION MATCHS (✅ CORRIGÉ)
 # ============================================================
 def get_matchs_periode(date_debut, date_fin, api_key=None):
     resultat = appel_api(
         {"met": "Fixtures", "from": date_debut, "to": date_fin},
         utiliser_cache=True
     )
-    if resultat["source"] == "erreur":
-        st.error(resultat["message"])
-        return []
-    if resultat["source"] in ("cache", "cache_expire"):
-        st.caption(f"📦 {resultat['message']}")
-    data = resultat.get("data") or {}
-    if data.get("success") == 1:
-        return data.get("result", [])
-    return []
+    
+    # ✅ NOUVEAU : Retourner l'objet complet au lieu de juste data
+    return resultat
 
 # ============================================================
 # TRAITEMENT MATCHS
@@ -155,15 +149,28 @@ def afficher_resultat_pred(res, j_a, j_b, surface):
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
-# PAGE MATCHS DU JOUR — avec cadenas Premium
+# PAGE MATCHS DU JOUR (✅ CORRIGÉ)
 # ============================================================
 def page_matchs_jour(modeles, df_base):
-    st.title("Matchs du jour")
+    st.title("🎾 Matchs du jour")
+    
+    # ✅ NOUVEAU : Bouton forcer rechargement
+    col_titre, col_forcer = st.columns([4, 1])
+    with col_forcer:
+        if st.button("🔄 Forcer rechargement", help="Vide le cache et recharge depuis l'API"):
+            # Vider le cache
+            if "api_cache" in st.session_state:
+                st.session_state.api_cache = {}
+            if "df_matchs_jour" in st.session_state:
+                del st.session_state["df_matchs_jour"]
+            st.success("Cache vidé !")
+            st.rerun()
+    
     st.markdown("---")
 
     col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
     with col1:
-        date_choisie = st.date_input("Date", value=datetime.now().date())
+        date_choisie = st.date_input("📅 Date", value=datetime.now().date())
     with col2:
         filtre_circuit = st.selectbox("Circuit", ["Tous", "ATP", "WTA", "Challenger", "ITF", "Futures"])
     with col3:
@@ -177,7 +184,6 @@ def page_matchs_jour(modeles, df_base):
         get_predictions_restantes, afficher_cadenas, afficher_message_apres_limite, \
         mode_invite_expire, afficher_popup_inscription
 
-    # Vérifier si mode invité expiré
     if mode_invite_expire():
         afficher_popup_inscription()
         return
@@ -186,13 +192,10 @@ def page_matchs_jour(modeles, df_base):
     restantes = get_predictions_restantes()
 
     if peut:
-        predire_tous = st.button("Predire TOUS les matchs automatiquement")
+        predire_tous = st.button("⚡ Predire TOUS les matchs automatiquement")
     else:
         predire_tous = False
-        afficher_cadenas(
-            f"🔒 {msg_limite}",
-            bouton_premium=True
-        )
+        afficher_cadenas(f"🔒 {msg_limite}", bouton_premium=True)
 
     st.markdown("---")
 
@@ -201,25 +204,55 @@ def page_matchs_jour(modeles, df_base):
         date_str     = str(date_choisie)
         date_str_fin = str(date_choisie + timedelta(days=1))
 
+        # ✅ NOUVEAU : Afficher la date utilisée
+        st.info(f"📅 Recherche des matchs pour : **{date_str}**")
+
         if est_hors_ligne():
-            st.warning("Mode hors-ligne - Matchs non disponibles.")
+            st.warning("⚠️ Mode hors-ligne - Matchs non disponibles.")
             return
 
-        with st.spinner("Chargement des matchs..."):
-            matchs_raw = get_matchs_periode(date_str, date_str)
-            if not matchs_raw:
-                matchs_raw = get_matchs_periode(date_str, date_str_fin)
+        with st.spinner("⏳ Chargement des matchs..."):
+            # ✅ NOUVEAU : Récupérer le résultat complet
+            resultat_1 = get_matchs_periode(date_str, date_str)
+            
+            # ✅ NOUVEAU : Vérifier le statut
+            if resultat_1["source"] == "erreur":
+                st.error(f"❌ {resultat_1['message']}")
+                
+                # Essayer avec date_fin
+                st.info("🔄 Nouvelle tentative avec date étendue...")
+                resultat_2 = get_matchs_periode(date_str, date_str_fin)
+                
+                if resultat_2["source"] == "erreur":
+                    st.error(f"❌ {resultat_2['message']}")
+                    st.warning("💡 **Solutions possibles :**")
+                    st.markdown("""
+                    1. Vérifiez que les clés API sont valides dans les variables d'environnement
+                    2. Attendez quelques heures si le quota est épuisé
+                    3. Utilisez le bouton **🔄 Forcer rechargement** en haut
+                    """)
+                    return
+                else:
+                    # Deuxième tentative réussie
+                    matchs_raw = resultat_2.get("data", {}).get("result", [])
+                    st.caption(resultat_2["message"])
+            else:
+                # Première tentative réussie
+                matchs_raw = resultat_1.get("data", {}).get("result", [])
+                st.caption(resultat_1["message"])
 
         df_matchs = traiter_matchs(matchs_raw, filtre_circuit, filtre_statut)
+        
         if df_matchs.empty:
-            st.warning("Aucun match trouve.")
+            st.warning("⚠️ Aucun match trouvé pour cette date et ces filtres.")
+            st.info(f"💡 **Vérifications :**\n- Date utilisée : {date_str}\n- Circuit : {filtre_circuit}\n- Statut : {filtre_statut}")
             return
 
         st.session_state["df_matchs_jour"] = df_matchs
         st.session_state["date_matchs"] = date_str
 
     if "df_matchs_jour" not in st.session_state:
-        st.info("Cliquez sur Charger pour voir les matchs.")
+        st.info("👆 Cliquez sur **Charger** pour voir les matchs.")
         return
 
     df_matchs = st.session_state["df_matchs_jour"]
@@ -231,10 +264,10 @@ def page_matchs_jour(modeles, df_base):
     a_venir  = total - termines - en_cours
 
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.metric("Total",    total)
-    with c2: st.metric("A venir",  a_venir)
-    with c3: st.metric("En cours", en_cours)
-    with c4: st.metric("Termines", termines)
+    with c1: st.metric("📊 Total",    total)
+    with c2: st.metric("⏰ A venir",  a_venir)
+    with c3: st.metric("▶️ En cours", en_cours)
+    with c4: st.metric("✅ Termines", termines)
     st.markdown("---")
 
     liste_joueurs = list(modeles["elo_final"].keys())
@@ -244,18 +277,17 @@ def page_matchs_jour(modeles, df_base):
 
     # ── Predire TOUS ──
     if predire_tous:
-        st.subheader("Predictions automatiques")
+        st.subheader("🤖 Predictions automatiques")
         from modules.prediction import predire_match
         from modules.auth import incrementer_compteur_predictions
         a_predire = df_matchs[~df_matchs["statut_low"].isin(["finished"])].head(30)
         if a_predire.empty:
-            st.info("Aucun match a venir.")
+            st.info("ℹ️ Aucun match a venir.")
         else:
             barre = st.progress(0)
             resultats = []
             nb_predits = 0
             for i, (_, match) in enumerate(a_predire.iterrows()):
-                # Vérifier limite à chaque prédiction
                 if not is_admin() and not is_premium():
                     r = get_predictions_restantes()
                     if r <= 0:
@@ -289,17 +321,17 @@ def page_matchs_jour(modeles, df_base):
                     })
                 barre.progress((i+1)/len(a_predire))
             df_res = pd.DataFrame(resultats)
-            st.success(f"{len(df_res)} predictions calculees !")
+            st.success(f"✅ {len(df_res)} predictions calculees !")
             st.dataframe(df_res, hide_index=True, use_container_width=True)
             csv = df_res.to_csv(index=False)
-            st.download_button("Telecharger CSV", data=csv,
+            st.download_button("📥 Telecharger CSV", data=csv,
                 file_name=f"predictions_{date_str}.csv", mime="text/csv")
         st.markdown("---")
 
     # ── Matchs EN COURS ──
     df_en_cours = df_matchs[df_matchs["statut_low"].isin(["inprogress","live"])]
     if not df_en_cours.empty:
-        st.subheader(f"En cours ({len(df_en_cours)})")
+        st.subheader(f"▶️ En cours ({len(df_en_cours)})")
         st.dataframe(df_en_cours[["Heure","Joueur A","Joueur B","Tournoi","Circuit","Score"]],
             hide_index=True, use_container_width=True)
         st.markdown("---")
@@ -307,15 +339,15 @@ def page_matchs_jour(modeles, df_base):
     # ── Matchs TERMINES ──
     df_termines = df_matchs[df_matchs["statut_low"] == "finished"]
     if not df_termines.empty:
-        st.subheader(f"Termines ({len(df_termines)})")
+        st.subheader(f"✅ Termines ({len(df_termines)})")
         st.dataframe(df_termines[["Heure","Joueur A","Joueur B","Tournoi","Circuit","Score"]],
             hide_index=True, use_container_width=True)
         st.markdown("---")
 
-    # ── Matchs A VENIR groupes par tournoi ──
+    # ── Matchs A VENIR ──
     df_a_venir = df_matchs[df_matchs["statut_low"].isin(["","notstarted","scheduled","ns"])]
     if not df_a_venir.empty:
-        st.subheader(f"A venir ({len(df_a_venir)})")
+        st.subheader(f"⏰ A venir ({len(df_a_venir)})")
         from modules.prediction import predire_match
         from modules.auth import incrementer_compteur_predictions
 
@@ -323,7 +355,7 @@ def page_matchs_jour(modeles, df_base):
         for tournoi in tournois:
             df_t = df_a_venir[df_a_venir["Tournoi"] == tournoi].reset_index(drop=True)
             circuit = df_t.iloc[0]["Circuit"]
-            with st.expander(f"{tournoi} — {circuit} ({len(df_t)} matchs)"):
+            with st.expander(f"🎾 {tournoi} — {circuit} ({len(df_t)} matchs)"):
                 for i, (_, match) in enumerate(df_t.iterrows()):
                     j_a_raw   = match["Joueur A"]
                     j_b_raw   = match["Joueur B"]
@@ -341,11 +373,10 @@ def page_matchs_jour(modeles, df_base):
                     with col_vs:  st.markdown("**vs**")
                     with col_b:   st.markdown(f"{j_b_raw}")
                     with col_btn:
-                        # ── Vérification limite avant chaque bouton Prédire ──
                         peut_pred, msg_pred = peut_faire_prediction()
 
                         if peut_pred:
-                            if st.button("Predire", key=f"pred_{event_key}_{i}"):
+                            if st.button("🔮 Predire", key=f"pred_{event_key}_{i}"):
                                 j_a = trouver_nom_base(j_a_raw, liste_joueurs) or j_a_raw
                                 j_b = trouver_nom_base(j_b_raw, liste_joueurs) or j_b_raw
                                 try:
@@ -359,21 +390,18 @@ def page_matchs_jour(modeles, df_base):
                                 except Exception as e:
                                     st.session_state["pred_resultats"][event_key] = {"erreur": str(e)}
                         else:
-                            # Bouton avec cadenas
                             st.button("🔒 Predire", key=f"pred_lock_{event_key}_{i}", disabled=True)
 
-                    # Afficher resultat si disponible
                     if event_key in st.session_state["pred_resultats"]:
                         data = st.session_state["pred_resultats"][event_key]
                         if "erreur" in data:
-                            st.error(f"Erreur : {data['erreur']}")
+                            st.error(f"❌ Erreur : {data['erreur']}")
                         else:
-                            st.success(f"Vainqueur : {data['res']['vainqueur']} ({data['res']['proba_v']}%) | Score : {data['res']['score_exact']} | Sets : {data['res']['nb_sets']}")
+                            st.success(f"✅ Vainqueur : {data['res']['vainqueur']} ({data['res']['proba_v']}%) | Score : {data['res']['score_exact']} | Sets : {data['res']['nb_sets']}")
                             afficher_resultat_pred(data["res"], data["j_a"], data["j_b"], detecter_surface(data.get("tournoi", "")))
                         st.info("💡 Pour une prediction plus precise, utilisez l'onglet Prediction avec toutes les donnees : surface exacte, round, format et cotes du match.")
                     st.divider()
 
-        # ── Message limite si toutes les prédictions sont épuisées ──
         if not peut:
             st.markdown("---")
             afficher_message_apres_limite()
