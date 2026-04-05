@@ -470,11 +470,9 @@ if CHARGE:
         try:
             page_joueurs(modeles, df_base)
         except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_joueurs", onglet="Joueurs",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Joueurs.")
+            import traceback
+            st.error(f"❌ ERREUR JOUEURS : {e}")
+            st.code(traceback.format_exc())
 
     if is_admin():
         # ── Onglets réservés à l'admin ──────────────────────────
