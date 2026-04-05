@@ -15,11 +15,10 @@ from datetime import datetime, timedelta
 # ─────────────────────────────────────────────
 
 ALLSPORTS_ENDPOINT = "https://apiv2.allsportsapi.com/tennis/"
-QUOTA_PAR_CLE = 100          # requêtes/jour par clé
-SEUIL_ALERTE_ADMIN = 0.20    # alerte quand < 20% du quota global restant
-DUREE_CACHE_HEURES = 24      # durée de validité du cache local
+QUOTA_PAR_CLE = 100
+SEUIL_ALERTE_ADMIN = 0.20
+DUREE_CACHE_HEURES = 24
 
-# Clés API récupérées depuis les variables d'environnement
 API_KEYS = [k for k in [
     os.environ.get("ALLSPORTS_API_KEY"),
     os.environ.get("ALLSPORTS_API_KEY_2"),
@@ -54,7 +53,6 @@ def _incrementer_quota(key):
         st.session_state.api_quota[key]["used"] += 1
 
 def _choisir_cle():
-    """Retourne la clé avec le plus de quota restant, ou None si tout épuisé."""
     _reset_quota_si_nouveau_jour()
     meilleure_cle = None
     meilleur_quota = 0
@@ -87,9 +85,23 @@ def _lire_cache(params: dict):
     age_heures = (time.time() - entry["timestamp"]) / 3600
     if age_heures > DUREE_CACHE_HEURES:
         return None
-    return entry["data"]
+    
+    # ✅ NOUVEAU : Vérifier que le cache contient des matchs
+    data = entry["data"]
+    if isinstance(data, dict):
+        result = data.get("result", [])
+        if not result or len(result) == 0:
+            return None  # Cache vide, on ignore
+    
+    return data
 
 def _ecrire_cache(params: dict, data):
+    # ✅ NOUVEAU : Ne pas cacher si vide
+    if isinstance(data, dict):
+        result = data.get("result", [])
+        if not result or len(result) == 0:
+            return  # Ne pas stocker un cache vide
+    
     if "api_cache" not in st.session_state:
         st.session_state.api_cache = {}
     st.session_state.api_cache[_cache_key(params)] = {
@@ -103,45 +115,40 @@ def _ecrire_cache(params: dict, data):
 # ─────────────────────────────────────────────
 
 def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
-    """
-    Effectue un appel à AllSports API avec rotation de clés et cache.
-
-    Retourne un dict avec :
-        - "data"   : résultats de l'API (ou cache)
-        - "source" : "api" | "cache" | "erreur"
-        - "cle_utilisee" : index de la clé (1/2/3)
-        - "message" : message d'info/alerte
-    """
     _init_quota_state()
 
     # 1. Vérifier le cache
     if utiliser_cache:
         donnees_cache = _lire_cache(params)
         if donnees_cache is not None:
+            # ✅ NOUVEAU : Compter les matchs
+            nb_matchs = 0
+            if isinstance(donnees_cache, dict):
+                nb_matchs = len(donnees_cache.get("result", []))
+            
             return {
                 "data": donnees_cache,
                 "source": "cache",
                 "cle_utilisee": None,
-                "message": "✅ Données servies depuis le cache local (quota préservé).",
+                "message": f"✅ Cache : {nb_matchs} match(s) trouvé(s) (quota préservé).",
             }
 
     # 2. Choisir la meilleure clé
     cle = _choisir_cle()
     if cle is None:
-        # Toutes les clés épuisées → retourner cache expiré si disponible
         cache_expire = st.session_state.get("api_cache", {}).get(_cache_key(params))
         if cache_expire:
             return {
                 "data": cache_expire["data"],
                 "source": "cache_expire",
                 "cle_utilisee": None,
-                "message": "⚠️ Quota épuisé sur toutes les clés. Données de cache (possiblement anciennes) affichées.",
+                "message": "⚠️ Quota épuisé. Cache ancien affiché.",
             }
         return {
             "data": None,
             "source": "erreur",
             "cle_utilisee": None,
-            "message": "❌ Quota épuisé sur toutes les clés API et aucun cache disponible.",
+            "message": "❌ Quota épuisé et aucun cache disponible.",
         }
 
     # 3. Effectuer l'appel
@@ -155,11 +162,16 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
         _incrementer_quota(cle)
         _ecrire_cache(params, data)
 
-        # Vérifier seuil d'alerte
+        # ✅ NOUVEAU : Compter les matchs dans la réponse
+        nb_matchs = 0
+        if isinstance(data, dict) and data.get("success") == 1:
+            nb_matchs = len(data.get("result", []))
+        
         restant, total = _quota_global_restant()
-        message = f"✅ Requête OK via clé #{index_cle} ({_quota_restant(cle)} restantes sur cette clé)."
+        message = f"✅ API clé #{index_cle} : {nb_matchs} match(s) ({_quota_restant(cle)} requêtes restantes)."
+        
         if restant / total < SEUIL_ALERTE_ADMIN:
-            message += f"\n🚨 ALERTE ADMIN : quota global à {restant}/{total} requêtes restantes (<20%)."
+            message += f"\n🚨 ALERTE : {restant}/{total} requêtes globales restantes."
 
         return {
             "data": data,
@@ -173,7 +185,7 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
             "data": None,
             "source": "erreur",
             "cle_utilisee": index_cle,
-            "message": f"❌ Erreur réseau avec clé #{index_cle} : {e}",
+            "message": f"❌ Erreur réseau clé #{index_cle} : {e}",
         }
 
 
@@ -182,7 +194,6 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
 # ─────────────────────────────────────────────
 
 def afficher_statut_api():
-    """À appeler dans le Panel Admin pour afficher l'état des quotas."""
     _init_quota_state()
     _reset_quota_si_nouveau_jour()
 
