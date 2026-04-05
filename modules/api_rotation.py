@@ -1,5 +1,5 @@
 """
-api_rotation.py — Rotation intelligente multi-clés AllSports API + cache local
+api_rotation.py — Rotation intelligente multi-clés AllSports API + fallback Tennis-Data.org
 Tennis IA | Fulgence N'da
 """
 
@@ -9,12 +9,14 @@ import json
 import requests
 import streamlit as st
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 
 # ─────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────
 
 ALLSPORTS_ENDPOINT = "https://apiv2.allsportsapi.com/tennis/"
+TENNIS_DATA_ENDPOINT = "http://www.tennis-data.co.uk/live/live.php"
 QUOTA_PAR_CLE = 100
 SEUIL_ALERTE_ADMIN = 0.20
 DUREE_CACHE_HEURES = 24
@@ -86,21 +88,21 @@ def _lire_cache(params: dict):
     if age_heures > DUREE_CACHE_HEURES:
         return None
     
-    # ✅ NOUVEAU : Vérifier que le cache contient des matchs
+    # ✅ Vérifier que le cache contient des matchs
     data = entry["data"]
     if isinstance(data, dict):
         result = data.get("result", [])
         if not result or len(result) == 0:
-            return None  # Cache vide, on ignore
+            return None
     
     return data
 
 def _ecrire_cache(params: dict, data):
-    # ✅ NOUVEAU : Ne pas cacher si vide
+    # ✅ Ne pas cacher si vide
     if isinstance(data, dict):
         result = data.get("result", [])
         if not result or len(result) == 0:
-            return  # Ne pas stocker un cache vide
+            return
     
     if "api_cache" not in st.session_state:
         st.session_state.api_cache = {}
@@ -111,7 +113,71 @@ def _ecrire_cache(params: dict, data):
 
 
 # ─────────────────────────────────────────────
-# APPEL API PRINCIPAL
+# ✅ FALLBACK : TENNIS-DATA.ORG
+# ─────────────────────────────────────────────
+
+def _fallback_tennis_data(date_debut, date_fin):
+    """
+    Récupère les matchs depuis Tennis-Data.org et les convertit au format AllSports
+    """
+    try:
+        response = requests.get(TENNIS_DATA_ENDPOINT, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Chercher les tables de matchs
+        tables = soup.find_all('table')
+        matchs = []
+        
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows[1:]:  # Skip header
+                cols = row.find_all('td')
+                if len(cols) >= 5:
+                    try:
+                        # Extraction basique
+                        date_match = cols[0].text.strip()
+                        tournoi = cols[1].text.strip() if len(cols) > 1 else "Unknown"
+                        joueur_a = cols[2].text.strip() if len(cols) > 2 else ""
+                        joueur_b = cols[3].text.strip() if len(cols) > 3 else ""
+                        score = cols[4].text.strip() if len(cols) > 4 else ""
+                        surface = cols[5].text.strip() if len(cols) > 5 else "Hard"
+                        
+                        if joueur_a and joueur_b:
+                            # Conversion au format AllSports
+                            matchs.append({
+                                "event_key": hash(f"{joueur_a}{joueur_b}{date_match}"),
+                                "event_date": date_debut,
+                                "event_time": "TBD",
+                                "event_first_player": joueur_a,
+                                "first_player_key": 0,
+                                "event_second_player": joueur_b,
+                                "second_player_key": 0,
+                                "league_name": tournoi,
+                                "event_ground": surface,
+                                "event_final_result": score,
+                                "event_status": "Finished" if score else "Not Started",
+                                "country_name": "ATP/WTA",
+                                "league_round": "Unknown"
+                            })
+                    except:
+                        continue
+        
+        if matchs:
+            return {
+                "success": 1,
+                "result": matchs
+            }
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+
+# ─────────────────────────────────────────────
+# APPEL API PRINCIPAL (avec fallback)
 # ─────────────────────────────────────────────
 
 def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
@@ -121,7 +187,6 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
     if utiliser_cache:
         donnees_cache = _lire_cache(params)
         if donnees_cache is not None:
-            # ✅ NOUVEAU : Compter les matchs
             nb_matchs = 0
             if isinstance(donnees_cache, dict):
                 nb_matchs = len(donnees_cache.get("result", []))
@@ -130,12 +195,31 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
                 "data": donnees_cache,
                 "source": "cache",
                 "cle_utilisee": None,
-                "message": f"✅ Cache : {nb_matchs} match(s) trouvé(s) (quota préservé).",
+                "message": f"✅ Cache : {nb_matchs} match(s) (quota préservé).",
             }
 
-    # 2. Choisir la meilleure clé
+    # 2. Choisir la meilleure clé AllSports
     cle = _choisir_cle()
+    
+    # 3. Si toutes les clés AllSports épuisées → Tennis-Data fallback
     if cle is None:
+        # Essayer Tennis-Data.org
+        date_debut = params.get("from", datetime.now().strftime("%Y-%m-%d"))
+        date_fin = params.get("to", date_debut)
+        
+        data_fallback = _fallback_tennis_data(date_debut, date_fin)
+        
+        if data_fallback:
+            nb_matchs = len(data_fallback.get("result", []))
+            _ecrire_cache(params, data_fallback)
+            return {
+                "data": data_fallback,
+                "source": "tennis_data",
+                "cle_utilisee": None,
+                "message": f"🔄 Tennis-Data.org : {nb_matchs} match(s) (AllSports épuisé).",
+            }
+        
+        # Si même Tennis-Data échoue → cache expiré
         cache_expire = st.session_state.get("api_cache", {}).get(_cache_key(params))
         if cache_expire:
             return {
@@ -144,14 +228,15 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
                 "cle_utilisee": None,
                 "message": "⚠️ Quota épuisé. Cache ancien affiché.",
             }
+        
         return {
             "data": None,
             "source": "erreur",
             "cle_utilisee": None,
-            "message": "❌ Quota épuisé et aucun cache disponible.",
+            "message": "❌ AllSports épuisé et Tennis-Data inaccessible.",
         }
 
-    # 3. Effectuer l'appel
+    # 4. Effectuer l'appel AllSports
     params_complets = {"APIkey": cle, **params}
     index_cle = API_KEYS.index(cle) + 1
 
@@ -159,16 +244,24 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
         response = requests.get(ALLSPORTS_ENDPOINT, params=params_complets, timeout=10)
         response.raise_for_status()
         data = response.json()
+        
+        # ✅ Vérifier si la clé est expirée (erreur paiement)
+        if data.get("error") == "1":
+            msg_erreur = data.get("result", [{}])[0].get("msg", "")
+            if "payment" in msg_erreur.lower():
+                # Clé expirée → marquer comme épuisée et réessayer
+                st.session_state.api_quota[cle]["used"] = QUOTA_PAR_CLE
+                return appel_api(params, utiliser_cache=False)  # Retry avec autre clé
+        
         _incrementer_quota(cle)
         _ecrire_cache(params, data)
 
-        # ✅ NOUVEAU : Compter les matchs dans la réponse
         nb_matchs = 0
         if isinstance(data, dict) and data.get("success") == 1:
             nb_matchs = len(data.get("result", []))
         
         restant, total = _quota_global_restant()
-        message = f"✅ API clé #{index_cle} : {nb_matchs} match(s) ({_quota_restant(cle)} requêtes restantes)."
+        message = f"✅ AllSports clé #{index_cle} : {nb_matchs} match(s) ({_quota_restant(cle)} requêtes restantes)."
         
         if restant / total < SEUIL_ALERTE_ADMIN:
             message += f"\n🚨 ALERTE : {restant}/{total} requêtes globales restantes."
@@ -181,11 +274,27 @@ def appel_api(params: dict, utiliser_cache: bool = True) -> dict:
         }
 
     except requests.exceptions.RequestException as e:
+        # Erreur réseau AllSports → essayer Tennis-Data
+        date_debut = params.get("from", datetime.now().strftime("%Y-%m-%d"))
+        date_fin = params.get("to", date_debut)
+        
+        data_fallback = _fallback_tennis_data(date_debut, date_fin)
+        
+        if data_fallback:
+            nb_matchs = len(data_fallback.get("result", []))
+            _ecrire_cache(params, data_fallback)
+            return {
+                "data": data_fallback,
+                "source": "tennis_data",
+                "cle_utilisee": None,
+                "message": f"🔄 Tennis-Data.org : {nb_matchs} match(s) (AllSports erreur).",
+            }
+        
         return {
             "data": None,
             "source": "erreur",
             "cle_utilisee": index_cle,
-            "message": f"❌ Erreur réseau clé #{index_cle} : {e}",
+            "message": f"❌ Erreur AllSports clé #{index_cle} et Tennis-Data : {e}",
         }
 
 
@@ -216,4 +325,5 @@ def afficher_statut_api():
         st.progress(pct_cle, text=f"{icone} Clé #{i} — {used} utilisées / {restant} restantes")
 
     taille_cache = len(st.session_state.get("api_cache", {}))
-    st.caption(f"📦 Cache local : {taille_cache} entrée(s) stockée(s) en mémoire.")
+    st.caption(f"📦 Cache local : {taille_cache} entrée(s)")
+    st.info("🔄 Fallback actif : Tennis-Data.org (si AllSports épuisé)")
