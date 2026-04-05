@@ -383,13 +383,6 @@ def ajouter_joueur_api(nom):
 # PAGE JOUEURS
 # ============================================================
 def page_joueurs(modeles, df_base):
-    try:
-        st.write("DEBUG clés modeles :", list(modeles.keys()))
-    except Exception as e:
-        st.error(f"ERREUR : {e}")
-        import traceback
-        st.code(traceback.format_exc())
-        return
     st.title("👤 Profil Joueur")
     st.markdown("---")
 
@@ -515,8 +508,14 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             if choix in options:
                 joueur_sel = suggestions[options.index(choix)][0]
 
-                with st.spinner("⏳ Chargement du profil..."):
-                    profil = get_profil_joueur(joueur_sel, modeles, df_base, df_joueurs)
+                try:
+                    with st.spinner("⏳ Chargement du profil..."):
+                        profil = get_profil_joueur(joueur_sel, modeles, df_base, df_joueurs)
+                except Exception as _err:
+                    import traceback
+                    st.error(f"❌ Erreur chargement profil : {_err}")
+                    st.code(traceback.format_exc())
+                    st.stop()
 
                 st.markdown("---")
 
