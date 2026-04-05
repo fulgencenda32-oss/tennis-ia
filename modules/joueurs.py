@@ -1,8 +1,6 @@
 # ============================================================
-# MODULE JOUEURS — VERSION CORRIGÉE
-# Basé sur l'ancien code fonctionnel + enrichissement joueurs.csv
-# via jointure floue (rapidfuzz) pour éviter les problèmes de
-# format de noms différents entre les deux bases.
+# MODULE JOUEURS — VERSION CORRIGÉE v2
+# Correction Bug #4 : gestion joueurs.csv + affichage erreurs
 # ============================================================
 import streamlit as st
 import pandas as pd
@@ -48,9 +46,6 @@ def recherche_floue(nom, liste_joueurs, limite=8, seuil=55):
 
 # ============================================================
 # JOINTURE FLOUE AVEC joueurs.csv
-# Résout le problème de noms différents entre les deux bases :
-#   df_base      → "Djokovic N."
-#   joueurs.csv  → "Novak Djokovic"
 # ============================================================
 def trouver_joueur_csv(nom, df_joueurs, seuil=70):
     """
@@ -380,19 +375,23 @@ def ajouter_joueur_api(nom):
     return []
 
 # ============================================================
-# PAGE JOUEURS
+# PAGE JOUEURS — CORRECTION BUG #4
 # ============================================================
 def page_joueurs(modeles, df_base):
     st.title("👤 Profil Joueur")
     st.markdown("---")
 
-    # ── Chargement de joueurs.csv (local ou HuggingFace) ──
+    # ── Chargement de joueurs.csv (CORRECTION BUG #4) ──
     df_joueurs = None
     try:
+        # ✅ UTILISE cfg.FICHIER_JOUEURS au lieu d'un chemin en dur
         chemin_joueurs = cfg.FICHIER_JOUEURS
+        
         if os.path.exists(chemin_joueurs):
             df_joueurs = pd.read_csv(chemin_joueurs)
+            st.success(f"✅ Fichier joueurs.csv chargé : {len(df_joueurs)} joueurs")
         else:
+            # Fallback HuggingFace
             try:
                 from huggingface_hub import hf_hub_download
                 chemin_hf = hf_hub_download(
@@ -401,10 +400,14 @@ def page_joueurs(modeles, df_base):
                     repo_type = 'dataset'
                 )
                 df_joueurs = pd.read_csv(chemin_hf)
-            except Exception:
-                pass
+                st.info(f"📥 Fichier joueurs.csv chargé depuis HuggingFace : {len(df_joueurs)} joueurs")
+            except Exception as e_hf:
+                st.warning(f"⚠️ Impossible de charger joueurs.csv depuis HuggingFace : {e_hf}")
+    
+    # ✅ AFFICHAGE COMPLET DE L'ERREUR avec st.exception()
     except Exception as e:
-        st.warning(f"⚠️ Impossible de charger joueurs.csv : {e}")
+        st.error(f"❌ Erreur lors du chargement de joueurs.csv")
+        st.exception(e)  # Affiche la stack trace complète
 
     liste_joueurs = list(modeles['elo_final'].keys())
 
@@ -420,7 +423,13 @@ def page_joueurs(modeles, df_base):
         lancer = st.button("Rechercher", type="primary")
 
     if nom_recherche and lancer:
-        suggestions = recherche_floue(nom_recherche, liste_joueurs)
+        # ✅ GESTION D'ERREUR AMÉLIORÉE
+        try:
+            suggestions = recherche_floue(nom_recherche, liste_joueurs)
+        except Exception as e:
+            st.error("❌ Erreur lors de la recherche floue")
+            st.exception(e)
+            st.stop()
 
         if suggestions:
             options            = [f"{j} (similarité {s:.0f}%)" for j, s in suggestions]
@@ -515,17 +524,16 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 st.stop()
 
             # ── Affichage du profil ──
-            # On s'assure que choix est bien dans options avant d'indexer
+            # ✅ GESTION D'ERREUR AMÉLIORÉE
             if choix in options:
                 joueur_sel = suggestions[options.index(choix)][0]
 
                 try:
                     with st.spinner("⏳ Chargement du profil..."):
                         profil = get_profil_joueur(joueur_sel, modeles, df_base, df_joueurs)
-                except Exception as _err:
-                    import traceback
-                    st.error(f"❌ Erreur chargement profil : {_err}")
-                    st.code(traceback.format_exc())
+                except Exception as e:
+                    st.error(f"❌ Erreur lors du chargement du profil de {joueur_sel}")
+                    st.exception(e)  # ✅ Affiche la stack trace complète
                     st.stop()
 
                 st.markdown("---")
