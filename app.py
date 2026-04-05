@@ -278,27 +278,37 @@ def charger_base():
     # Seules 4 colonnes sont utilisées par l'app pour les prédictions
     # winner_name/loser_name : filtrage matchs
     # winner_rank/loser_rank : récupération classement
-    COLS = ['winner_name', 'loser_name', 'winner_rank', 'loser_rank']
+    COLS = [
+        'winner_name', 'loser_name',
+        'winner_rank', 'loser_rank',
+        'winner_ioc',  'loser_ioc',
+        'tourney_date', 'tourney_name',
+        'surface', 'round', 'score',
+    ]
+
+    def lire_csv_securise(chemin):
+        """Lit le CSV avec les colonnes disponibles parmi COLS."""
+        try:
+            # Lire les colonnes disponibles dans le fichier
+            cols_dispo = pd.read_csv(chemin, nrows=0).columns.tolist()
+            cols_a_lire = [c for c in COLS if c in cols_dispo]
+            return pd.read_csv(chemin, usecols=cols_a_lire, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin, low_memory=False)
 
     # Nouveau fichier nettoyé (priorité)
     chemin = os.path.join(
         os.path.dirname(__file__), 'data', 'cleaned', 'matchs_clean.csv'
     )
     if os.path.exists(chemin):
-        try:
-            return pd.read_csv(chemin, usecols=COLS, low_memory=False)
-        except Exception:
-            return pd.read_csv(chemin, low_memory=False)
+        return lire_csv_securise(chemin)
 
     # Fallback ancien fichier local
     chemin_old = os.path.join(
         os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
     )
     if os.path.exists(chemin_old):
-        try:
-            return pd.read_csv(chemin_old, usecols=COLS, low_memory=False)
-        except Exception:
-            return pd.read_csv(chemin_old, low_memory=False)
+        return lire_csv_securise(chemin_old)
 
     # Fallback HuggingFace — nouveau fichier
     try:
@@ -308,10 +318,7 @@ def charger_base():
             filename  = 'matchs_clean.csv',
             repo_type = 'dataset'
         )
-        try:
-            return pd.read_csv(chemin_hf, usecols=COLS, low_memory=False)
-        except Exception:
-            return pd.read_csv(chemin_hf, low_memory=False)
+        return lire_csv_securise(chemin_hf)
     except Exception:
         pass
 
@@ -323,10 +330,7 @@ def charger_base():
             filename  = 'BASE_FEATURES.csv',
             repo_type = 'dataset'
         )
-        try:
-            return pd.read_csv(chemin_hf, usecols=COLS, low_memory=False)
-        except Exception:
-            return pd.read_csv(chemin_hf, low_memory=False)
+        return lire_csv_securise(chemin_hf)
     except Exception as e:
         return None
 
