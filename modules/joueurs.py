@@ -383,6 +383,13 @@ def ajouter_joueur_api(nom):
 # PAGE JOUEURS
 # ============================================================
 def page_joueurs(modeles, df_base):
+    try:
+        st.write("DEBUG clés modeles :", list(modeles.keys()))
+    except Exception as e:
+        st.error(f"ERREUR : {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return
     st.title("👤 Profil Joueur")
     st.markdown("---")
 
