@@ -47,7 +47,7 @@ import os
 from datetime import datetime
 import random
 import plotly.graph_objects as go
-import time  # 🔧 CORRECTION : ajout pour gestion du timing
+import time
 
 # ============================================================
 # 🔧 CORRECTION : CACHE GLOBAL pour éviter les lectures répétées
@@ -58,7 +58,6 @@ _CLASSEMENTS_CACHE_TIME = 0
 def _charger_classements_cache():
     """Charge classements.json UNE SEULE FOIS et le garde en mémoire"""
     global _CLASSEMENTS_CACHE, _CLASSEMENTS_CACHE_TIME
-    # Recharger seulement toutes les 10 minutes
     if _CLASSEMENTS_CACHE is not None and (time.time() - _CLASSEMENTS_CACHE_TIME) < 600:
         return _CLASSEMENTS_CACHE
     try:
@@ -113,7 +112,6 @@ def verifier_auth_safe():
             'ok': True
         }
     except Exception as e:
-        # 🔧 Si Firebase plante, on fournit des fonctions par défaut
         st.warning(f"⚠️ Système d'authentification indisponible : {e}")
         return {
             'peut_faire_prediction': lambda: (True, "Mode hors-ligne"),
@@ -314,31 +312,73 @@ def predire_match(
     _classements_cache = _charger_classements_cache()
 
     def get_rank(joueur):
+        """
+        Récupère le classement d'un joueur de manière ULTRA-SÉCURISÉE.
+        Supporte plusieurs formats de colonnes et ne plante JAMAIS.
+        """
+        # 1️⃣ Vérifier cache classements.json
         if joueur in _classements_cache:
             return _classements_cache[joueur]
+        
+        # 2️⃣ Recherche par nom de famille dans le cache
         nom_court = joueur.split()[-1] if joueur else ""
         for nom_complet, rang in _classements_cache.items():
             if nom_court and nom_court.lower() in nom_complet.lower():
                 return rang
-        if df_base is None:
+        
+        # 3️⃣ Si df_base n'existe pas, retourner valeur par défaut
+        if df_base is None or df_base.empty:
             return 500
-        # Compatibilité nouvelle base (winner_nom_complet) et ancienne (winner_name)
-        col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
-        col_l = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
-        mask = (
-            (df_base[col_w] == joueur) |
-            (df_base[col_l] == joueur)
-        )
-        rows = df_base[mask]
-        if len(rows) == 0: return 500
-        for _, row in rows.iloc[::-1].iterrows():
-            if row[col_w] == joueur:
-                r = safe_float(row.get('winner_rank', 0))
-            else:
-                r = safe_float(row.get('loser_rank', 0))
-            if 0 < r < 2000:
-                return r
-        return 500
+        
+        # 4️⃣ Détecter les colonnes disponibles (support multi-format)
+        colonnes_possibles_winner = ['winner_name', 'winner_nom_complet', 'Winner', 'winner']
+        colonnes_possibles_loser = ['loser_name', 'loser_nom_complet', 'Loser', 'loser']
+        
+        col_w = None
+        col_l = None
+        
+        # Trouver la première colonne valide pour winner
+        for col in colonnes_possibles_winner:
+            if col in df_base.columns:
+                col_w = col
+                break
+        
+        # Trouver la première colonne valide pour loser
+        for col in colonnes_possibles_loser:
+            if col in df_base.columns:
+                col_l = col
+                break
+        
+        # 5️⃣ Si aucune colonne trouvée, retourner valeur par défaut
+        if col_w is None or col_l is None:
+            return 500
+        
+        # 6️⃣ Chercher le joueur dans df_base
+        try:
+            mask = (
+                (df_base[col_w] == joueur) |
+                (df_base[col_l] == joueur)
+            )
+            rows = df_base[mask]
+            
+            if len(rows) == 0:
+                return 500
+            
+            # Parcourir les matchs du plus récent au plus ancien
+            for _, row in rows.iloc[::-1].iterrows():
+                if row[col_w] == joueur:
+                    r = safe_float(row.get('winner_rank', 0))
+                else:
+                    r = safe_float(row.get('loser_rank', 0))
+                
+                if 0 < r < 2000:
+                    return r
+            
+            return 500
+        
+        except Exception:
+            # En cas d'erreur inattendue, ne jamais planter
+            return 500
 
     rank_a = get_rank(joueur_a)
     rank_b = get_rank(joueur_b)
@@ -374,7 +414,6 @@ def predire_match(
 
     # H2H
     if df_base is not None:
-        # Compatibilité nouvelle base (winner_nom_complet) et ancienne (winner_name)
         col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
         col_l = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
         mask_h2h = (
@@ -540,7 +579,6 @@ def predire_match(
     anomalies = []
 
     if df_base is not None:
-        # Compatibilité nouvelle base (winner_nom_complet) et ancienne (winner_name)
         col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
         col_l = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
         nb_matchs_a = len(df_base[
@@ -918,10 +956,8 @@ def chercher_match_aujourd_hui(nom):
 
         st.session_state[cache_key] = matchs_trouves[:3]
         return matchs_trouves[:3]
-    except Exception as e:
-        # 🔧 Ne plante plus si l'API est down
+    except Exception:
         return []
-
 
 def page_prediction(modeles, df_base):
     st.title("🎾 Prédiction de match")
@@ -1204,14 +1240,13 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
         elif joueur_a == joueur_b:
             st.error("❌ Les deux joueurs doivent être différents !")
         else:
-            # 🔧 CORRECTION : vérification auth avec gestion d'erreur
             try:
                 peut, message = peut_faire_prediction()
                 if not peut:
                     st.error(f"🔒 {message}")
                     st.stop()
             except Exception:
-                pass  # Mode hors-ligne, on continue
+                pass
 
             with st.spinner("⏳ Calcul en cours..."):
                 try:
@@ -1227,7 +1262,6 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     st.exception(e)
                     st.stop()
 
-            # 🔧 CORRECTION : incrémenter avec gestion d'erreur
             try:
                 incrementer_compteur_predictions()
             except Exception:
@@ -1235,7 +1269,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.success("✅ Prédiction calculée !")
 
-            # ── Badge modèle utilisé ──
+            # Badge modèle utilisé
             modele_info = res.get('modele_utilise', 'Général')
             if 'Suprême' in modele_info:
                 st.success(f"👑 Modèle **{modele_info}** utilisé pour cette prédiction")
@@ -1247,7 +1281,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             else:
                 st.info(f"🌍 Modèle **{modele_info}** utilisé pour cette prédiction")
 
-            # ── Score de confiance ──
+            # Score de confiance
             conf = res.get('confiance', {})
             if conf:
                 niveau  = conf.get('niveau', '')
@@ -1268,7 +1302,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                         for d in details:
                             st.markdown(f"• {d}")
 
-            # ── Explication automatique ──
+            # Explication automatique
             explication = res.get('explication', [])
             if explication:
                 with st.expander("🧠 Pourquoi cette prédiction ?", expanded=True):
@@ -1277,7 +1311,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     for exp in explication:
                         st.markdown(f"  {exp}")
 
-            # ── Zone Copier + WhatsApp ──
+            # Zone Copier + WhatsApp
             conf_emoji  = res.get('confiance', {}).get('emoji', '')
             conf_niveau = res.get('confiance', {}).get('niveau', '')
             vb_info     = res.get('value_bet_info', [])
@@ -1335,7 +1369,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            # ── Mode Abstention ──
+            # Mode Abstention
             if res.get('anomalies'):
                 if res.get('abstention'):
                     st.error(
@@ -1350,7 +1384,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     for msg in res['anomalies']:
                         st.markdown(f"- {msg}")
 
-            # ── Résultats principaux ──
+            # Résultats principaux
             col_v1, col_v2, col_v3, col_v4 = st.columns(4)
             with col_v1:
                 st.metric("🏆 Vainqueur prédit", res['vainqueur'], f"{res['proba_v']}%")
@@ -1363,7 +1397,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            # ── Consensus IA Suprême ──
+            # Consensus IA Suprême
             if res.get('ia_supreme_active'):
                 cons = res.get('consensus_score', 0)
                 if cons < 10:
@@ -1373,11 +1407,10 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                 else:
                     cons_emoji, cons_label = "🔴", "DÉSACCORD — Match imprévisible"
 
-                # 🔧 CORRECTION : gestion erreur sur peut_voir_consensus
                 try:
                     can_see = peut_voir_consensus()
                 except Exception:
-                    can_see = True  # Mode hors-ligne
+                    can_see = True
 
                 if can_see:
                     with st.expander(f"{cons_emoji} IA Suprême · {cons_label}", expanded=True):
@@ -1399,7 +1432,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            # ── Statistiques comparées ──
+            # Statistiques comparées
             col_d1, col_d2 = st.columns(2)
             with col_d1:
                 st.markdown("**📊 Statistiques comparées**")
@@ -1447,7 +1480,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
 
             st.markdown("---")
 
-            # ── Over/Under — Total Jeux ──
+            # Over/Under — Total Jeux
             st.markdown("**📈 Over / Under — Total Jeux**")
             ou_jeux = res.get('ou_jeux_predit')
             ou_std  = res.get('ou_jeux_std', 3.5)
@@ -1471,7 +1504,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             else:
                 st.info("Modèle Over/Under disponible après réentraînement (`python entrainement_hebdo.py`)")
 
-            # ── Comparaison IA vs Bookmaker ──
+            # Comparaison IA vs Bookmaker
             if utiliser_cotes and cote_a and cote_b and cote_a > 1 and cote_b > 1:
                 st.markdown("---")
                 st.markdown("**📊 Prédiction IA vs Bookmaker**")
@@ -1490,10 +1523,9 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
                     st.metric(joueur_a, f"{prob_bk_a}%", f"cote {cote_a}")
                     st.metric(joueur_b, f"{prob_bk_b}%", f"cote {cote_b}")
 
-            # ── Value Bets ──
+            # Value Bets
             if res['value_bet_info']:
                 st.markdown("---")
-                # 🔧 CORRECTION : gestion erreur sur peut_voir_value_bet_detail
                 try:
                     can_see_vb = peut_voir_value_bet_detail()
                 except Exception:
@@ -1522,7 +1554,7 @@ Surface : Hard / Clay / Grass | Date : YYYY-MM-DD | Round : R32/QF/SF/F | Rank :
             elif utiliser_cotes:
                 st.info("❌ Pas de value bet détecté — les cotes sont bien calibrées par rapport à la prédiction IA.")
 
-            # 🔧 CORRECTION PRINCIPALE : Sauvegarde Firebase SÉCURISÉE
+            # Sauvegarde Firebase SÉCURISÉE
             ok, msg = sauvegarder_prediction_safe(res)
             if ok:
                 st.caption(f"✅ Prédiction sauvegardée — {res['date']}")
