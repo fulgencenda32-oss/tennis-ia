@@ -301,14 +301,20 @@ def charger_base():
         os.path.dirname(__file__), 'data', 'cleaned', 'matchs_clean.csv'
     )
     if os.path.exists(chemin):
-        return lire_csv_securise(chemin)
+        try:
+            return lire_csv_securise(chemin)
+        except Exception as e:
+            st.warning(f"⚠️ Erreur chargement matchs_clean.csv local : {e}")
 
     # Fallback ancien fichier local
     chemin_old = os.path.join(
         os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
     )
     if os.path.exists(chemin_old):
-        return lire_csv_securise(chemin_old)
+        try:
+            return lire_csv_securise(chemin_old)
+        except Exception as e:
+            st.warning(f"⚠️ Erreur chargement BASE_FEATURES.csv local : {e}")
 
     # Fallback HuggingFace — nouveau fichier
     try:
@@ -319,8 +325,8 @@ def charger_base():
             repo_type = 'dataset'
         )
         return lire_csv_securise(chemin_hf)
-    except Exception:
-        pass
+    except Exception as e:
+        st.warning(f"⚠️ Erreur téléchargement HF matchs_clean.csv : {e}")
 
     # Fallback HuggingFace — ancien fichier
     try:
@@ -332,6 +338,7 @@ def charger_base():
         )
         return lire_csv_securise(chemin_hf)
     except Exception as e:
+        st.warning(f"⚠️ Erreur téléchargement HF BASE_FEATURES.csv : {e}")
         return None
 
 # ============================================================
