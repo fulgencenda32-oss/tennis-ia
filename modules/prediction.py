@@ -322,14 +322,17 @@ def predire_match(
                 return rang
         if df_base is None:
             return 500
+        # Compatibilité nouvelle base (winner_nom_complet) et ancienne (winner_name)
+        col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
+        col_l = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
         mask = (
-            (df_base['winner_name'] == joueur) |
-            (df_base['loser_name']  == joueur)
+            (df_base[col_w] == joueur) |
+            (df_base[col_l] == joueur)
         )
         rows = df_base[mask]
         if len(rows) == 0: return 500
         for _, row in rows.iloc[::-1].iterrows():
-            if row['winner_name'] == joueur:
+            if row[col_w] == joueur:
                 r = safe_float(row.get('winner_rank', 0))
             else:
                 r = safe_float(row.get('loser_rank', 0))
@@ -371,15 +374,18 @@ def predire_match(
 
     # H2H
     if df_base is not None:
+        # Compatibilité nouvelle base (winner_nom_complet) et ancienne (winner_name)
+        col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
+        col_l = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
         mask_h2h = (
-            ((df_base['winner_name'] == joueur_a) &
-             (df_base['loser_name']  == joueur_b)) |
-            ((df_base['winner_name'] == joueur_b) &
-             (df_base['loser_name']  == joueur_a))
+            ((df_base[col_w] == joueur_a) &
+             (df_base[col_l] == joueur_b)) |
+            ((df_base[col_w] == joueur_b) &
+             (df_base[col_l] == joueur_a))
         )
         h2h_matchs = df_base[mask_h2h]
         total_h2h  = len(h2h_matchs)
-        wins_a     = len(h2h_matchs[h2h_matchs['winner_name'] == joueur_a])
+        wins_a     = len(h2h_matchs[h2h_matchs[col_w] == joueur_a])
     else:
         total_h2h = 0
         wins_a    = 0
@@ -534,13 +540,16 @@ def predire_match(
     anomalies = []
 
     if df_base is not None:
+        # Compatibilité nouvelle base (winner_nom_complet) et ancienne (winner_name)
+        col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
+        col_l = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
         nb_matchs_a = len(df_base[
-            (df_base['winner_name'] == joueur_a) |
-            (df_base['loser_name']  == joueur_a)
+            (df_base[col_w] == joueur_a) |
+            (df_base[col_l] == joueur_a)
         ])
         nb_matchs_b = len(df_base[
-            (df_base['winner_name'] == joueur_b) |
-            (df_base['loser_name']  == joueur_b)
+            (df_base[col_w] == joueur_b) |
+            (df_base[col_l] == joueur_b)
         ])
         if nb_matchs_a < 10:
             anomalies.append(f"⚠️ {joueur_a} a seulement {nb_matchs_a} match(s) en base — données insuffisantes")
@@ -554,13 +563,15 @@ def predire_match(
         )
 
     if df_base is not None and 'surface' in df_base.columns:
+        col_w2 = 'winner_nom_complet' if 'winner_nom_complet' in df_base.columns else 'winner_name'
+        col_l2 = 'loser_nom_complet'  if 'loser_nom_complet'  in df_base.columns else 'loser_name'
         surf_clean = surface.split()[0]
         matchs_surf_a = len(df_base[
-            ((df_base['winner_name'] == joueur_a) | (df_base['loser_name'] == joueur_a)) &
+            ((df_base[col_w2] == joueur_a) | (df_base[col_l2] == joueur_a)) &
             (df_base['surface'].astype(str).str.contains(surf_clean, case=False, na=False))
         ])
         matchs_surf_b = len(df_base[
-            ((df_base['winner_name'] == joueur_b) | (df_base['loser_name'] == joueur_b)) &
+            ((df_base[col_w2] == joueur_b) | (df_base[col_l2] == joueur_b)) &
             (df_base['surface'].astype(str).str.contains(surf_clean, case=False, na=False))
         ])
         if matchs_surf_a < 5:
