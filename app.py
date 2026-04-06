@@ -213,23 +213,6 @@ if not afficher_interface_connexion():
 afficher_barre_utilisateur()
 
 # ============================================================
-# ONBOARDING — 3 écrans pour nouveaux utilisateurs
-# ============================================================
-from modules.onboarding import afficher_onboarding
-
-if afficher_onboarding():
-    st.stop()
-
-    # ============================================================
-# VÉRIFICATION MODE INVITÉ (3 jours)
-# ============================================================
-from modules.auth import is_anonyme, mode_invite_expire, afficher_popup_inscription
-
-if mode_invite_expire():
-    afficher_popup_inscription()
-    st.stop()
-
-# ============================================================
 # REDÉFINITION simplifier_round
 # ============================================================
 def simplifier_round(r):
@@ -250,13 +233,8 @@ def simplifier_round(r):
 @st.cache_resource
 def charger_modeles():
     chemin = os.path.join(
-        os.path.dirname(__file__), 'data', 'models', 'modeles_tennis_v2.pkl'
+        os.path.dirname(__file__), 'data', 'modeles_tennis_v2.pkl'
     )
-    if not os.path.exists(chemin):
-        # Fallback ancien emplacement
-        chemin = os.path.join(
-            os.path.dirname(__file__), 'data', 'modeles_tennis_v2.pkl'
-        )
     if not os.path.exists(chemin):
         try:
             from huggingface_hub import hf_hub_download
@@ -278,57 +256,15 @@ def charger_base():
     # Seules 4 colonnes sont utilisées par l'app pour les prédictions
     # winner_name/loser_name : filtrage matchs
     # winner_rank/loser_rank : récupération classement
-    COLS = [
-        'winner_name', 'loser_name',
-        'winner_rank', 'loser_rank',
-        'winner_ioc',  'loser_ioc',
-        'tourney_date', 'tourney_name',
-        'surface', 'round', 'score',
-    ]
-
-    def lire_csv_securise(chemin):
-        """Lit le CSV avec les colonnes disponibles parmi COLS."""
-        try:
-            # Lire les colonnes disponibles dans le fichier
-            cols_dispo = pd.read_csv(chemin, nrows=0).columns.tolist()
-            cols_a_lire = [c for c in COLS if c in cols_dispo]
-            return pd.read_csv(chemin, usecols=cols_a_lire, low_memory=False)
-        except Exception:
-            return pd.read_csv(chemin, low_memory=False)
-
-    # Nouveau fichier nettoyé (priorité)
+    COLS = ['winner_name', 'loser_name', 'winner_rank', 'loser_rank']
     chemin = os.path.join(
-        os.path.dirname(__file__), 'data', 'cleaned', 'matchs_clean.csv'
+        os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
     )
     if os.path.exists(chemin):
         try:
-            return lire_csv_securise(chemin)
-        except Exception as e:
-            st.warning(f"⚠️ Erreur chargement matchs_clean.csv local : {e}")
-
-    # Fallback ancien fichier local
-    chemin_old = os.path.join(
-        os.path.dirname(__file__), 'data', 'BASE_FEATURES.csv'
-    )
-    if os.path.exists(chemin_old):
-        try:
-            return lire_csv_securise(chemin_old)
-        except Exception as e:
-            st.warning(f"⚠️ Erreur chargement BASE_FEATURES.csv local : {e}")
-
-    # Fallback HuggingFace — nouveau fichier
-    try:
-        from huggingface_hub import hf_hub_download
-        chemin_hf = hf_hub_download(
-            repo_id   = 'fulgence10/tennis-data',
-            filename  = 'matchs_clean.csv',
-            repo_type = 'dataset'
-        )
-        return lire_csv_securise(chemin_hf)
-    except Exception as e:
-        st.warning(f"⚠️ Erreur téléchargement HF matchs_clean.csv : {e}")
-
-    # Fallback HuggingFace — ancien fichier
+            return pd.read_csv(chemin, usecols=COLS, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin, low_memory=False)
     try:
         from huggingface_hub import hf_hub_download
         chemin_hf = hf_hub_download(
@@ -336,9 +272,11 @@ def charger_base():
             filename  = 'BASE_FEATURES.csv',
             repo_type = 'dataset'
         )
-        return lire_csv_securise(chemin_hf)
+        try:
+            return pd.read_csv(chemin_hf, usecols=COLS, low_memory=False)
+        except Exception:
+            return pd.read_csv(chemin_hf, low_memory=False)
     except Exception as e:
-        st.warning(f"⚠️ Erreur téléchargement HF BASE_FEATURES.csv : {e}")
         return None
 
 # ============================================================
@@ -360,7 +298,7 @@ with st.spinner("⏳ Chargement de Tennis IA..."):
 st.markdown("""
 <div class="main-header">
     <h1>🎾 Tennis IA</h1>
-    <p>Intelligence Artificielle de Prédictions Tennis · ATP · WTA · Challengers · ITF · 755 917 matchs</p>
+    <p>Intelligence Artificielle de Prédictions Tennis · ATP · WTA · Challengers · ITF · 830 000+ matchs</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -374,10 +312,10 @@ with col3:
 with col4:
     st.metric("⚖️ Handicap", f"{modeles.get('acc_handi',0)*100:.1f}%")
 with col5:
-    st.metric("📊 Matchs analysés", "755 917")
+    st.metric("📊 Matchs analysés", "830 906")
 
 if not CSV_DISPO:
-    st.warning("⚠️ Base de données non disponible – certaines fonctionnalités sont limitées.")
+    st.warning("⚠️ BASE_FEATURES.csv non disponible – certaines fonctionnalités sont limitées.")
 
 
 # ============================================================
@@ -408,7 +346,7 @@ try:
 except Exception:
     pass
 
-st.success("✅ Nouvelle base chargée - Version 04/04/2026")
+st.markdown("---")
 
 # ============================================================
 # ONGLETS NAVIGATION
@@ -423,135 +361,47 @@ if CHARGE:
     from modules.paiement       import page_paiement
     from modules.suggestions    import page_suggestions
 
-    # ============================================================
-    # ONGLETS — différenciés selon le rôle
-    # Admin    : voit tous les onglets (+ Mise à jour + Performance IA)
-    # Utilisateur : voit uniquement les onglets publics
-    # ============================================================
+    # Onglets de base
+    onglets = [
+        "📅 Matchs du jour",
+        "🎾 Prédiction",
+        "👤 Joueurs",
+        "🔄 Mise à jour",
+        "📚 Historique",
+        "📊 Performance IA",
+        "💡 Suggestions",
+    ]
+
+    # Ajouter onglet Admin si c'est Fulgence N'da
     if is_admin():
-        onglets = [
-            "📅 Matchs du jour",   # 0
-            "🎾 Prédiction",        # 1
-            "👤 Joueurs",           # 2
-            "🔄 Mise à jour",       # 3  — admin uniquement
-            "📚 Historique",        # 4
-            "📊 Performance IA",    # 5  — admin uniquement
-            "💡 Suggestions",       # 6
-            "🛡️ Admin",             # 7
-            "⭐ Premium",           # 8
-        ]
-    else:
-        onglets = [
-            "📅 Matchs du jour",   # 0
-            "🎾 Prédiction",        # 1
-            "👤 Joueurs",           # 2
-            "📚 Historique",        # 3
-            "💡 Suggestions",       # 4
-            "⭐ Premium",           # 5
-        ]
+        onglets.append("🛡️ Admin")
+    onglets.append("⭐ Premium")
 
     tabs = st.tabs(onglets)
 
-    # ── Onglets communs aux deux rôles ──────────────────────────
     with tabs[0]:
-        try:
-            page_matchs_jour(modeles, df_base)
-        except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_matchs_jour", onglet="Matchs du jour",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Matchs du jour.")
-
+        page_matchs_jour(modeles, df_base)
     with tabs[1]:
-        try:
-            page_prediction(modeles, df_base)
-        except Exception as e:
-            from modules.logs import log_erreur
-            log_erreur(e, contexte="page_prediction", onglet="Prédiction",
-                       uid=st.session_state.get("user",{}).get("uid",""),
-                       email=st.session_state.get("user",{}).get("email",""))
-            st.error("❌ Une erreur est survenue dans Prédiction.")
-
+        page_prediction(modeles, df_base)
     with tabs[2]:
-        try:
-            page_joueurs(modeles, df_base)
-        except Exception as e:
-            import traceback
-            st.error(f"❌ ERREUR JOUEURS : {e}")
-            st.code(traceback.format_exc())
+        page_joueurs(modeles, df_base)
+    with tabs[3]:
+        page_mise_a_jour(modeles, df_base)
+    with tabs[4]:
+        page_historique()
+    with tabs[5]:
+        page_performance()
+    with tabs[6]:
+        page_suggestions()
 
+    # Admin (tab 7) + Premium (dernier tab)
     if is_admin():
-        # ── Onglets réservés à l'admin ──────────────────────────
-        with tabs[3]:
-            try:
-                page_mise_a_jour(modeles, df_base)
-            except Exception as e:
-                from modules.logs import log_erreur
-                log_erreur(e, contexte="page_mise_a_jour", onglet="Mise à jour",
-                           uid=st.session_state.get("user",{}).get("uid",""),
-                           email=st.session_state.get("user",{}).get("email",""))
-                st.error("❌ Une erreur est survenue dans Mise à jour.")
-
-        with tabs[4]:
-            try:
-                page_historique()
-            except Exception as e:
-                from modules.logs import log_erreur
-                log_erreur(e, contexte="page_historique", onglet="Historique",
-                           uid=st.session_state.get("user",{}).get("uid",""),
-                           email=st.session_state.get("user",{}).get("email",""))
-                st.error("❌ Une erreur est survenue dans Historique.")
-
-        with tabs[5]:
-            try:
-                page_performance()
-            except Exception as e:
-                from modules.logs import log_erreur
-                log_erreur(e, contexte="page_performance", onglet="Performance IA",
-                           uid=st.session_state.get("user",{}).get("uid",""),
-                           email=st.session_state.get("user",{}).get("email",""))
-                st.error("❌ Une erreur est survenue dans Performance IA.")
-
-        with tabs[6]:
-            try:
-                page_suggestions()
-            except Exception as e:
-                from modules.logs import log_erreur
-                log_erreur(e, contexte="page_suggestions", onglet="Suggestions",
-                           uid=st.session_state.get("user",{}).get("uid",""),
-                           email=st.session_state.get("user",{}).get("email",""))
-                st.error("❌ Une erreur est survenue dans Suggestions.")
-
         with tabs[7]:
             afficher_panel_admin()
-
         with tabs[8]:
             page_paiement()
-
     else:
-        # ── Suite onglets utilisateur (index décalé sans Mise à jour / Perf) ──
-        with tabs[3]:
-            try:
-                page_historique()
-            except Exception as e:
-                from modules.logs import log_erreur
-                log_erreur(e, contexte="page_historique", onglet="Historique",
-                           uid=st.session_state.get("user",{}).get("uid",""),
-                           email=st.session_state.get("user",{}).get("email",""))
-                st.error("❌ Une erreur est survenue dans Historique.")
-
-        with tabs[4]:
-            try:
-                page_suggestions()
-            except Exception as e:
-                from modules.logs import log_erreur
-                log_erreur(e, contexte="page_suggestions", onglet="Suggestions",
-                           uid=st.session_state.get("user",{}).get("uid",""),
-                           email=st.session_state.get("user",{}).get("email",""))
-                st.error("❌ Une erreur est survenue dans Suggestions.")
-
-        with tabs[5]:
+        with tabs[7]:
             page_paiement()
 
     # Restaurer onglet actif via JavaScript
