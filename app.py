@@ -312,7 +312,7 @@ with col3:
 with col4:
     st.metric("⚖️ Handicap", f"{modeles.get('acc_handi',0)*100:.1f}%")
 with col5:
-    st.metric("📊 Matchs analysés", "830 906")
+    st.metric("📊 Matchs analysés", "755 917")
 
 if not CSV_DISPO:
     st.warning("⚠️ BASE_FEATURES.csv non disponible – certaines fonctionnalités sont limitées.")
