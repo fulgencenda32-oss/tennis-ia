@@ -15,9 +15,9 @@ def page_performance():
     st.markdown("---")
 
     # Charger les vraies stats depuis le modèle
-    acc_win   = 0.702
-    acc_sets  = 0.712
-    acc_handi = 0.699
+    acc_win   = 0.701
+    acc_sets  = 0.701
+    acc_handi = 0.700
     nb_matchs = "832 355"
     nb_joueurs = "25 333"
     date_entr = "2026-03-27"
@@ -103,8 +103,8 @@ def page_performance():
     with col_h1:
         st.metric("📅 Période", "2010 — 2026")
     with col_h2:
-        st.metric("🎾 Total matchs", "830 906")
+        st.metric("🎾 Total matchs", "755 917")
     with col_h3:
-        st.metric("👤 Joueurs uniques", "~45 000")
+        st.metric("👤 Joueurs uniques", "27 225")
     with col_h4:
         st.metric("🏆 Tournois", "~2 500")
