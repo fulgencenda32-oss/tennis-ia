@@ -305,6 +305,31 @@ st.markdown("""
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     st.metric("🏆 Joueurs", f"{modeles.get('nb_joueurs', 26802):,}")
+
+    # === DIAGNOSTIC TEMPORAIRE - Base de données ===
+    try:
+        import sys
+        sys.path.insert(0, os.path.dirname(__file__))
+        from modules.prediction import charger_base
+        
+        df_diag = charger_base()
+        
+        if df_diag is not None and len(df_diag) > 0:
+            col_w = 'winner_nom_complet' if 'winner_nom_complet' in df_diag.columns else 'winner_name'
+            
+            st.info(f'''
+            🔍 **DIAGNOSTIC BASE CHARGÉE** :
+            - Matchs en base CSV : **{len(df_diag):,}**
+            - Dernier match : **{df_diag['tourney_date'].max() if 'tourney_date' in df_diag.columns else 'N/A'}**
+            - Joueurs uniques : **{df_diag[col_w].nunique():,}**
+            - Colonne utilisée : **{col_w}**
+            ''')
+        else:
+            st.warning("⚠️ Base de données non chargée ou vide")
+    except Exception as e:
+        st.error(f"❌ Erreur diagnostic : {e}")
+    # === FIN DIAGNOSTIC ===
+    
 with col2:
     st.metric("🏆 Vainqueur", f"{modeles.get('acc_win',0)*100:.1f}%")
 with col3:
